@@ -1,8 +1,10 @@
 import uuid
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Literal
 from sqlalchemy import Boolean, Column, Integer, String, BIGINT, JSON, DateTime, func
 from database import Base
+
+from pydantic import BaseModel
 
 class UserFlows(Base):
     __tablename__ = 'user_flows'
