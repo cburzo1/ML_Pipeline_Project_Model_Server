@@ -6,7 +6,10 @@ from pydantic import BaseModel
 from database import SessionLocal
 from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/user_flows", tags=["User Flows"])
+router = APIRouter(
+    prefix="/user_flows",
+    tags=["User Flows"]
+)
 
 class UserFlowBase(BaseModel):
     user_id: int
