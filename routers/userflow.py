@@ -54,9 +54,10 @@ async def get_user_flow_by_name(flow_name: str, db: db_dependency):
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
+    db_user_flow = UserFlows(**user_flow.model_dump())
+    db.add(db_user_flow)
+
     try:
-        db_user_flow = UserFlows(**user_flow.model_dump())
-        db.add(db_user_flow)
         db.commit()
         db.refresh(db_user_flow)
 
@@ -69,9 +70,8 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
             "message": "User flow created successfully"
         }
 
-    except IntegrityError as e:
+    except IntegrityError:
         db.rollback()
-        # Catch all unique violations here
         raise HTTPException(
             status_code=400,
             detail="A flow with this name already exists!"
@@ -81,12 +81,17 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Database error: {str(e.orig) if hasattr(e,'orig') else str(e)}"
+            detail=f"Database error: {str(e)}"
         )
 
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {str(e)}"
-        )
+@router.delete("/{flow_name}", status_code=status.HTTP_410_GONE)
+async def delete_user_flow_by_name(flow_name: str, db: db_dependency):
+    # Query the database for the given flow name
+    flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+
+    print(flow)
+
+    db.delete(flow)
+    db.commit()
+
+    return "DELETED"
