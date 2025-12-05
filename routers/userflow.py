@@ -1,8 +1,9 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 
 from models.user_flow import UserFlows
+from models.user_flow_update import UserFlowUpdate
 from schemas.config_schema import ConfigSchema
 from pydantic import BaseModel
 from database import SessionLocal
@@ -84,14 +85,80 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
             detail=f"Database error: {str(e)}"
         )
 
-@router.delete("/{flow_name}", status_code=status.HTTP_410_GONE)
-async def delete_user_flow_by_name(flow_name: str, db: db_dependency):
-    # Query the database for the given flow name
-    flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+@router.delete("/{user_id}/{flow_name}", status_code=status.HTTP_410_GONE)
+async def delete_user_flow_by_name(flow_name: str, user_id: int, db: db_dependency):
 
-    print(flow)
+    # Query the database for the entry
+    flow = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id,
+            UserFlows.flow_name == flow_name
+        )
+        .first()
+    )
+
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User flow '{flow_name}' not found for user {user_id}"
+        )
 
     db.delete(flow)
     db.commit()
 
-    return "DELETED"
+    return {"detail": "DELETED"}
+
+def shallow_merge(old: dict, new: dict):
+    for key, value in new.items():
+        # If both sides are dicts → merge one nested level
+        if isinstance(value, dict) and isinstance(old.get(key), dict):
+            for nested_key, nested_value in value.items():
+                old[key][nested_key] = nested_value
+
+        # Otherwise overwrite the value
+        else:
+            old[key] = value
+
+    return old
+
+@router.patch("/{user_id}/{flow_name}", status_code=status.HTTP_200_OK)
+async def update_user_flow(
+    user_id: int,
+    flow_name: str,
+    updates: UserFlowUpdate,
+    db: db_dependency
+):
+    # Locate the correct flow
+    flow = db.query(UserFlows).filter(
+        UserFlows.user_id == user_id,
+        UserFlows.flow_name == flow_name
+    ).first()
+
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flow '{flow_name}' for user {user_id} not found."
+        )
+
+    # Apply updates
+    if updates.flow_name is not None:
+        flow.flow_name = updates.flow_name
+
+    if updates.config_json:
+        current = dict(flow.config_json or {}) 
+        flow.config_json = shallow_merge(current, updates.config_json)
+
+    db.commit()
+    db.refresh(flow)
+
+    return {
+        "message": "Flow updated",
+        "updated_flow": {
+            "id": flow.id,
+            "user_id": flow.user_id,
+            "flow_name": flow.flow_name,
+            "config_json": flow.config_json,
+            "created_at": flow.created_at
+        }
+    }
