@@ -1,14 +1,10 @@
-import uuid
-from enum import Enum
 from typing import Optional, List, Literal
-
 from pydantic import BaseModel
-from sqlalchemy import Boolean, Column, Integer, String, BIGINT, JSON, DateTime, func
-from database import Base
 
 class ConfigSchema(BaseModel):
     algorithm: str                              # required
-    data_range: tuple[int, int]                 # required
+    data_range_X: tuple[int, int]                 # required
+    data_range_y: tuple[int, int]
 
     missing_data: Optional[
         Literal["drop", "mean", "median", "most_frequent", "none"]

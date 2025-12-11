@@ -1,7 +1,6 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
-
 from models.user_flow import UserFlows
 from models.user_flow_update import UserFlowUpdate
 from schemas.config_schema import ConfigSchema
@@ -109,17 +108,13 @@ async def delete_user_flow_by_name(flow_name: str, user_id: int, db: db_dependen
 
     return {"detail": "DELETED"}
 
-def shallow_merge(old: dict, new: dict):
+def deep_merge(old: dict, new: dict):
+    """Recursively merge two dictionaries."""
     for key, value in new.items():
-        # If both sides are dicts → merge one nested level
         if isinstance(value, dict) and isinstance(old.get(key), dict):
-            for nested_key, nested_value in value.items():
-                old[key][nested_key] = nested_value
-
-        # Otherwise overwrite the value
+            deep_merge(old[key], value)
         else:
             old[key] = value
-
     return old
 
 @router.patch("/{user_id}/{flow_name}", status_code=status.HTTP_200_OK)
@@ -146,8 +141,8 @@ async def update_user_flow(
         flow.flow_name = updates.flow_name
 
     if updates.config_json:
-        current = dict(flow.config_json or {}) 
-        flow.config_json = shallow_merge(current, updates.config_json)
+        current_config = flow.config_json or {}
+        flow.config_json = deep_merge(current_config, updates.config_json)
 
     db.commit()
     db.refresh(flow)
@@ -162,3 +157,23 @@ async def update_user_flow(
             "created_at": flow.created_at
         }
     }
+
+@router.post("/train/{user_id}/{flow_name}", status_code=status.HTTP_200_OK)
+async def train_model(
+    user_id: int,
+    flow_name: str,
+    db: db_dependency
+):
+    # Locate the correct flow
+    flow = db.query(UserFlows).filter(
+        UserFlows.user_id == user_id,
+        UserFlows.flow_name == flow_name
+    ).first()
+
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flow '{flow_name}' for user {user_id} not found."
+        )
+
+    print("THIS ::", flow.user_id, flow.flow_name, flow.config_json.get('algorithm'))
