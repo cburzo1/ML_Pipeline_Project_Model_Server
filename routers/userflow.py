@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Header
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 from models.user_flow import UserFlows
 from models.user_flow_update import UserFlowUpdate
@@ -33,10 +33,29 @@ def get_db():
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
+USER_KEYS = {
+    "KEY123": 1,
+    "KEY456": 2,
+}
+
+def get_current_user_id(x_api_key: str = Header(None)):
+    if x_api_key not in USER_KEYS:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return USER_KEYS[x_api_key]
+
 @router.get("/{flow_name}", status_code=status.HTTP_200_OK)
-async def get_user_flow_by_name(flow_name: str, db: db_dependency):
+async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     # Query the database for the given flow name
-    flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+
+    flow = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id,
+            UserFlows.flow_name == flow_name
+        )
+        .first()
+    )
 
     if not flow:
         raise HTTPException(
@@ -84,8 +103,8 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
             detail=f"Database error: {str(e)}"
         )
 
-@router.delete("/{user_id}/{flow_name}", status_code=status.HTTP_410_GONE)
-async def delete_user_flow_by_name(flow_name: str, user_id: int, db: db_dependency):
+@router.delete("/{flow_name}", status_code=status.HTTP_410_GONE)
+async def delete_user_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
     # Query the database for the entry
     flow = (
@@ -117,13 +136,8 @@ def deep_merge(old: dict, new: dict):
             old[key] = value
     return old
 
-@router.patch("/{user_id}/{flow_name}", status_code=status.HTTP_200_OK)
-async def update_user_flow(
-    user_id: int,
-    flow_name: str,
-    updates: UserFlowUpdate,
-    db: db_dependency
-):
+@router.patch("/{flow_name}", status_code=status.HTTP_200_OK)
+async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     # Locate the correct flow
     flow = db.query(UserFlows).filter(
         UserFlows.user_id == user_id,
@@ -158,12 +172,8 @@ async def update_user_flow(
         }
     }
 
-@router.post("/train/{user_id}/{flow_name}", status_code=status.HTTP_200_OK)
-async def train_model(
-    user_id: int,
-    flow_name: str,
-    db: db_dependency
-):
+@router.post("/train/{flow_name}", status_code=status.HTTP_200_OK)
+async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     # Locate the correct flow
     flow = db.query(UserFlows).filter(
         UserFlows.user_id == user_id,
