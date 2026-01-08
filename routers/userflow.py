@@ -186,4 +186,10 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
             detail=f"Flow '{flow_name}' for user {user_id} not found."
         )
 
-    print("THIS ::", flow.user_id, flow.flow_name, flow.config_json.get('algorithm'))
+    if flow.config_json.get('algorithm') == "k_means_clustering":
+        print("K_MEANS")
+
+    print("🔥 THIS FILE IS EXECUTING:", __file__)
+
+
+    print("THIS ::?", flow.user_id, flow.flow_name, type(flow.config_json.get('algorithm')))
