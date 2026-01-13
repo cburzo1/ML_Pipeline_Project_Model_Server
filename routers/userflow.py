@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from database import SessionLocal
 from sqlalchemy.orm import Session
 
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+
 router = APIRouter(
     prefix="/user_flows",
     tags=["User Flows"]
@@ -36,6 +41,7 @@ db_dependency = Annotated[Session, Depends(get_db)]
 USER_KEYS = {
     "KEY123": 1,
     "KEY456": 2,
+    "KEY789": 3
 }
 
 def get_current_user_id(x_api_key: str = Header(None)):
@@ -186,10 +192,26 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
             detail=f"Flow '{flow_name}' for user {user_id} not found."
         )
 
-    if flow.config_json.get('algorithm') == "k_means_clustering":
-        print("K_MEANS")
+    if flow.config_json.get('algorithm') == "lin alg":
+        print("linear regression")
 
-    print("🔥 THIS FILE IS EXECUTING:", __file__)
+        dataset = pd.read_csv("dummy_dataset.csv")
+        X = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_X')[1]].values
+        y = dataset.iloc[:, flow.config_json.get('data_range_y')[1]].values
+
+        print(len(X[0]))
+
+        print(X, y)
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        regressor = LinearRegression()
+        regressor.fit(X_train, y_train)
+
+        y_pred = regressor.predict(X_test)
+
+        print(y_pred)
+        #print(flow.config_json.get('data_range_X')[0])
+        #print(flow.config_json.get('data_range_y')[0])
 
 
-    print("THIS ::?", flow.user_id, flow.flow_name, type(flow.config_json.get('algorithm')))
+    #print("THIS ::?", flow.user_id, flow.flow_name, type(flow.config_json.get('algorithm')))
