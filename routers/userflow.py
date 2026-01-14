@@ -196,10 +196,16 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
         print("linear regression")
 
         dataset = pd.read_csv("dummy_dataset.csv")
-        X = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_X')[1]].values
-        y = dataset.iloc[:, flow.config_json.get('data_range_y')[1]].values
 
-        print(len(X[0]))
+        print(flow.config_json.get('data_range_X'))
+        print(flow.config_json.get('data_range_y'))
+
+        X = dataset.columns.get_loc('Feature1')
+
+        print(X)
+
+        '''X = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_X')[1]].values
+        y = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_y')[1]].values
 
         print(X, y)
 
@@ -209,7 +215,7 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
 
         y_pred = regressor.predict(X_test)
 
-        print(y_pred)
+        print(y_pred)'''
         #print(flow.config_json.get('data_range_X')[0])
         #print(flow.config_json.get('data_range_y')[0])
 
