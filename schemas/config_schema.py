@@ -8,6 +8,8 @@ class ConfigSchema(BaseModel):
     data_range_X: str  # required
     data_range_y: str
 
+    row_range: Optional[tuple[int, int]] = None
+
     missing_data: Optional[
         Literal["drop", "mean", "median", "most_frequent", "none"]
     ] = None

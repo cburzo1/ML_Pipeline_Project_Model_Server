@@ -192,32 +192,82 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
             detail=f"Flow '{flow_name}' for user {user_id} not found."
         )
 
-    if flow.config_json.get('algorithm') == "lin alg":
+    if flow.config_json.get('algorithm') == "Linear Regression":
         print("linear regression")
 
         dataset = pd.read_csv("dummy_dataset.csv")
 
-        print(flow.config_json.get('data_range_X'))
-        print(flow.config_json.get('data_range_y'))
+        column_X = flow.config_json.get("data_range_X")
+        column_y = flow.config_json.get("data_range_y")
 
-        X = dataset.columns.get_loc('Feature1')
+        # Required checks
+        if not column_X:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required field: data_range_X"
+            )
 
-        print(X)
+        if not column_y:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required field: data_range_y"
+            )
 
-        '''X = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_X')[1]].values
-        y = dataset.iloc[:, flow.config_json.get('data_range_X')[0]:flow.config_json.get('data_range_y')[1]].values
+        # Existence checks
+        missing = []
+        if column_X not in dataset.columns:
+            missing.append(column_X)
+
+        if column_y not in dataset.columns:
+            missing.append(column_y)
+
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid column(s): {missing}. Available columns: {list(dataset.columns)}"
+            )
+
+        # Safe indexing
+        Col_X = dataset.columns.get_loc(column_X)
+        Col_y = dataset.columns.get_loc(column_y)
+
+        rows = flow.config_json.get('row_range')
+
+        print(Col_X, Col_y)
+
+        print(rows)
+
+        print(dataset.columns.values, dataset.columns[Col_X])
+
+        X = None
+        y = None
+
+        if dataset.columns[Col_X] in dataset.columns.values:
+            X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
+            y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
+            )
 
         print(X, y)
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-        regressor = LinearRegression()
-        regressor.fit(X_train, y_train)
+        if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
+            regressor = LinearRegression()
+            regressor.fit(X_train, y_train)
 
-        y_pred = regressor.predict(X_test)
+            y_pred = regressor.predict(X_test)
 
-        print(y_pred)'''
-        #print(flow.config_json.get('data_range_X')[0])
-        #print(flow.config_json.get('data_range_y')[0])
-
-
-    #print("THIS ::?", flow.user_id, flow.flow_name, type(flow.config_json.get('algorithm')))
+            print(y_pred)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="your test_size parameter either does not exist or is invalid"
+            )
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="your algorithm does not exist in our collection"
+        )
