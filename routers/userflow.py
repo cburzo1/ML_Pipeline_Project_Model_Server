@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.impute import SimpleImputer
 
 router = APIRouter(
     prefix="/user_flows",
@@ -200,8 +201,8 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
         column_X = flow.config_json.get("data_range_X")
         column_y = flow.config_json.get("data_range_y")
 
-        # Required checks
-        if not column_X:
+        # Too remove. Redundant
+        '''if not column_X:
             raise HTTPException(
                 status_code=400,
                 detail="Missing required field: data_range_X"
@@ -211,7 +212,7 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
             raise HTTPException(
                 status_code=400,
                 detail="Missing required field: data_range_y"
-            )
+            )'''
 
         # Existence checks
         missing = []
