@@ -4,11 +4,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 from models.user_flow import UserFlows
 from models.user_flow_update import UserFlowUpdate
 from schemas.config_schema import ConfigSchema
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from database import SessionLocal
 from sqlalchemy.orm import Session
 
-import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
@@ -161,9 +161,23 @@ async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_depen
     if updates.flow_name is not None:
         flow.flow_name = updates.flow_name
 
+    '''if updates.config_json:
+        current_config = flow.config_json or {}
+        flow.config_json = deep_merge(current_config, updates.config_json)'''
     if updates.config_json:
         current_config = flow.config_json or {}
-        flow.config_json = deep_merge(current_config, updates.config_json)
+        merged_config = deep_merge(current_config, updates.config_json)
+
+        try:
+            # 🔑 THIS is where Literal validation happens
+            ConfigSchema.model_validate(merged_config)
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=e.errors()
+            )
+
+        flow.config_json = merged_config
 
     db.commit()
     db.refresh(flow)
@@ -196,7 +210,7 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
     if flow.config_json.get('algorithm') == "Linear Regression":
         print("linear regression")
 
-        dataset = pd.read_csv("dummy_dataset.csv")
+        dataset = pd.read_csv("dummy_dataset_missing_data.csv")
 
         column_X = flow.config_json.get("data_range_X")
         column_y = flow.config_json.get("data_range_y")
@@ -246,13 +260,23 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
         if dataset.columns[Col_X] in dataset.columns.values:
             X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
             y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
+
+            print(X)
+
+            if flow.config_json.get("missing_data"):
+                imputer = SimpleImputer(missing_values=np.nan, strategy=flow.config_json.get("missing_data"))
+
+                imputer.fit(X)
+                X = imputer.transform(X)
+                imputer.fit(y)
+                y = imputer.transform(y)
+                print("IMPUTED!!::", X, y)
+
         else:
             raise HTTPException(
                 status_code=400,
                 detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
             )
-
-        print(X, y)
 
         if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
