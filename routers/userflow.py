@@ -169,7 +169,7 @@ async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_depen
         merged_config = deep_merge(current_config, updates.config_json)
 
         try:
-            # 🔑 THIS is where Literal validation happens
+            # THIS is where Literal validation happens
             ConfigSchema.model_validate(merged_config)
         except ValidationError as e:
             raise HTTPException(
@@ -271,6 +271,9 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
                 imputer.fit(y)
                 y = imputer.transform(y)
                 print("IMPUTED!!::", X, y)
+
+            if flow.config_json.get("order_encoding"):
+                print(isinstance(X.dtype, pd.CategoricalDtype))
 
         else:
             raise HTTPException(
