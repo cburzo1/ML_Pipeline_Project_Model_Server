@@ -1,5 +1,6 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException, Header
+from pandas import Categorical
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 from models.user_flow import UserFlows
 from models.user_flow_update import UserFlowUpdate
@@ -7,9 +8,18 @@ from schemas.config_schema import ConfigSchema
 from pydantic import BaseModel, ValidationError
 from database import SessionLocal
 from sqlalchemy.orm import Session
+from enum import Enum
 
 import numpy as np
 import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from pandas.api.types import (
+    is_numeric_dtype,
+    is_bool_dtype,
+    is_datetime64_any_dtype,
+    is_object_dtype
+)
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.impute import SimpleImputer
@@ -193,6 +203,39 @@ async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_depen
         }
     }
 
+class FeatureType(str, Enum):
+    NUMERICAL = "numerical"
+    CATEGORICAL = "categorical"
+    BOOLEAN = "boolean"
+    DATETIME = "datetime"
+    TEXT = "text"
+
+def infer_feature_type(col: pd.Series) -> FeatureType:
+    dtype = col.dtype
+
+    if is_bool_dtype(dtype):
+        return FeatureType.BOOLEAN
+
+    if is_numeric_dtype(dtype):
+        return FeatureType.NUMERICAL
+
+    if isinstance(dtype, pd.CategoricalDtype):
+        return FeatureType.CATEGORICAL
+
+    if is_datetime64_any_dtype(dtype):
+        return FeatureType.DATETIME
+
+    # object fallback (strings, mixed)
+    if is_object_dtype(dtype):
+        # optional heuristic
+        unique_ratio = col.nunique(dropna=True) / max(len(col), 1)
+        if unique_ratio < 0.2:
+            return FeatureType.CATEGORICAL
+        return FeatureType.TEXT
+
+    # Safe default
+    return FeatureType.TEXT
+
 @router.post("/train/{flow_name}", status_code=status.HTTP_200_OK)
 async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     # Locate the correct flow
@@ -259,9 +302,20 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
 
         if dataset.columns[Col_X] in dataset.columns.values:
             X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
+            DTYPE_X = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_X])
             y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
+            DTYPE_y = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_y])
 
-            print(X)
+            print("COLS: ", X, y)
+
+            if DTYPE_X == "text" or DTYPE_y == "text":
+                if DTYPE_X == "text":
+                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
+                    X = np.array(ct.fit_transform(X).toarray())
+                else:
+                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
+                    y = np.array(ct.fit_transform(y).toarray())
+                print(X, "ENCODING APPLIED")
 
             if flow.config_json.get("missing_data"):
                 imputer = SimpleImputer(missing_values=np.nan, strategy=flow.config_json.get("missing_data"))
@@ -272,9 +326,6 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
                 y = imputer.transform(y)
                 print("IMPUTED!!::", X, y)
 
-            if flow.config_json.get("order_encoding"):
-                print(isinstance(X.dtype, pd.CategoricalDtype))
-
         else:
             raise HTTPException(
                 status_code=400,
@@ -283,12 +334,21 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
 
         if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
+
+            sc = StandardScaler()
+
+            '''X_train[:, 3:5] = sc.fit_transform(X_train[:, 3:5])
+            X_test[:, 3:5] = sc.transform(X_test[:, 3:5])'''
+
+            print("TRAINING DATA:::", X_train)
+            print("TRAINING DATA:::", X_test)
+
             regressor = LinearRegression()
             regressor.fit(X_train, y_train)
 
             y_pred = regressor.predict(X_test)
 
-            print(y_pred)
+            print("PREDICTIONS", y_pred)
         else:
             raise HTTPException(
                 status_code=400,
