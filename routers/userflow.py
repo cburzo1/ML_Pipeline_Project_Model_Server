@@ -337,11 +337,23 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
 
             sc = StandardScaler()
 
-            '''X_train[:, 3:5] = sc.fit_transform(X_train[:, 3:5])
-            X_test[:, 3:5] = sc.transform(X_test[:, 3:5])'''
+            print("TRAINING DATA BEFORE:::", X_train)
+            print("TRAINING DATA BEFORE:::", X_test)
+            print("__________________________________________________________________")
+            print("TRAINING DATA BEFORE:::", y_train)
+            print("TRAINING DATA BEFORE:::", y_test)
 
-            print("TRAINING DATA:::", X_train)
-            print("TRAINING DATA:::", X_test)
+            X_train = sc.fit_transform(X_train)
+            X_test = sc.transform(X_test)
+            print("__________________________________________________________________")
+            y_train = sc.fit_transform(y_train)
+            y_test = sc.transform(y_test)
+
+            print("TRAINING DATA AFTER:::", X_train)
+            print("TRAINING DATA AFTER:::", X_test)
+            print("---------------------------------------------------------------")
+            print("TRAINING DATA BEFORE:::", y_train)
+            print("TRAINING DATA BEFORE:::", y_test)
 
             regressor = LinearRegression()
             regressor.fit(X_train, y_train)
