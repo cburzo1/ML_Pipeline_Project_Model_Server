@@ -30,7 +30,7 @@ router = APIRouter(
 )
 
 class UserFlowBase(BaseModel):
-    user_id: int
+    #user_id: int
     flow_name: str
     config_json: ConfigSchema
 
