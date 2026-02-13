@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, status, HTTPException, Header
+from fastapi import APIRouter, Depends, status, HTTPException, Header, Form, File, UploadFile
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 from models.datasets import DataSets
 from pydantic import BaseModel, ValidationError
@@ -41,3 +41,26 @@ def get_current_user_id(x_api_key: str = Header(None)):
     if x_api_key not in USER_KEYS:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return USER_KEYS[x_api_key]
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def add_dataset(
+    db: db_dependency,
+    dataset_name: str = Form(...),
+    description: str = Form(None),
+    has_header: bool = Form(True),
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id)
+):
+    new_dataset = DataSets(
+        user_id=user_id,
+        dataset_name=dataset_name,
+    )
+
+    try:
+        db.add(new_dataset)
+        db.commit()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dataset '{dataset_name}' already exists for this user."
+        )

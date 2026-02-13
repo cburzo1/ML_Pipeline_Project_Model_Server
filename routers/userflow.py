@@ -89,7 +89,21 @@ async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Dep
     }
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user_flow(user_flow: UserFlowBase, db: db_dependency):
+async def create_user_flow(user_flow: UserFlowBase, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+    '''flow = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id
+        )
+        .first()
+    )
+
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User '{user_id}' not found"
+        )'''
+
     db_user_flow = UserFlows(**user_flow.model_dump())
     db.add(db_user_flow)
 
