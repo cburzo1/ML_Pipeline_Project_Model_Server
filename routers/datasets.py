@@ -53,22 +53,30 @@ async def add_dataset(
     file: UploadFile = File(...),
     user_id: int = Depends(get_current_user_id)
 ):
-    user_folder = f"bucket/csv/{user_id}"
-    os.makedirs(user_folder, exist_ok=True)
-    file_loc = f"{user_folder}/{dataset_name}.csv"
+    if file.filename.lower().endswith(".csv"):
+        user_folder = f"bucket/csv/{user_id}"
+        os.makedirs(user_folder, exist_ok=True)
+        file_loc = f"{user_folder}/{dataset_name}.csv"
 
-    with open(file_loc, "wb") as buffer:
-        buffer.write(await file.read())
+        with open(file_loc, "wb") as buffer:
+            buffer.write(await file.read())
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Only CSV files are allowed."
+        )
 
     dataset = pd.read_csv(file_loc)
     row_count = len(dataset)
+    schema = {col: str(dtype) for col, dtype in dataset.dtypes.items()}
 
     new_dataset = DataSets(
         user_id=user_id,
         dataset_name=dataset_name,
         description = description,
         storage_path=file_loc,
-        row_count = row_count
+        row_count = row_count,
+        column_schema = schema
     )
 
     try:

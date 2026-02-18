@@ -18,7 +18,7 @@ class DataSets(Base):
     format = Column(SQLEnum(DataFormat), nullable=False, default=DataFormat.csv)
     storage_path = Column(String(255), nullable=False)
     row_count = Column(Integer)
-    #column_schema = Column(MutableDict.as_mutable(JSON))
+    column_schema = Column(MutableDict.as_mutable(JSON))
     #has_header = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     #deleted_at = Column(DateTime, default=func.now())
