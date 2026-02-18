@@ -1,3 +1,4 @@
+import os
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException, Header, Form, File, UploadFile
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
@@ -6,6 +7,8 @@ from pydantic import BaseModel, ValidationError
 from database import SessionLocal
 from sqlalchemy.orm import Session
 from enum import Enum
+
+import pandas as pd
 
 router = APIRouter(
     prefix="/datasets",
@@ -47,13 +50,25 @@ async def add_dataset(
     db: db_dependency,
     dataset_name: str = Form(...),
     description: str = Form(None),
-    has_header: bool = Form(True),
     file: UploadFile = File(...),
     user_id: int = Depends(get_current_user_id)
 ):
+    user_folder = f"bucket/csv/{user_id}"
+    os.makedirs(user_folder, exist_ok=True)
+    file_loc = f"{user_folder}/{dataset_name}.csv"
+
+    with open(file_loc, "wb") as buffer:
+        buffer.write(await file.read())
+
+    dataset = pd.read_csv(file_loc)
+    row_count = len(dataset)
+
     new_dataset = DataSets(
         user_id=user_id,
         dataset_name=dataset_name,
+        description = description,
+        storage_path=file_loc,
+        row_count = row_count
     )
 
     try:
@@ -64,3 +79,4 @@ async def add_dataset(
             status_code=400,
             detail=f"Dataset '{dataset_name}' already exists for this user."
         )
+
