@@ -45,6 +45,57 @@ def get_current_user_id(x_api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return USER_KEYS[x_api_key]
 
+@router.get("/{dataset_name}", status_code=status.HTTP_200_OK)
+async def get_dataset_by_name(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+    dataset = (
+        db.query(DataSets)
+        .filter(
+            DataSets.user_id == user_id,
+            DataSets.dataset_name == dataset_name
+        )
+        .first()
+    )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail=f"the dataset '{dataset_name}' not found"
+        )
+
+    return {
+        "id": dataset.id,
+        "user_id": dataset.user_id,
+        "flow_name": dataset.dataset_name,
+        "description": dataset.description,
+        "row_count": dataset.row_count,
+        "created_at": dataset.created_at
+    }
+
+@router.get("/", status_code=status.HTTP_200_OK)
+async def get_datasets(db: db_dependency, user_id: int = Depends(get_current_user_id)):
+    # Query the database for the given flow name
+    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+
+    datasets = (
+        db.query(DataSets)
+        .filter(
+            DataSets.user_id == user_id
+        ).all()
+    )
+
+    if not datasets:
+        raise HTTPException(
+            status_code=404,
+            detail=f"user {user_id} has no datasets on record."
+        )
+
+    dataset_list = []
+
+    for dataset in datasets:
+        dataset_list.append([dataset.dataset_name, dataset.created_at])
+
+    return dataset_list
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def add_dataset(
     db: db_dependency,
@@ -88,3 +139,26 @@ async def add_dataset(
             detail=f"Dataset '{dataset_name}' already exists for this user."
         )
 
+@router.delete("/{dataset_name}", status_code=status.HTTP_410_GONE)
+async def delete_dataset_by_name(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+
+    # Query the database for the entry
+    flow = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id,
+            UserFlows.flow_name == flow_name
+        )
+        .first()
+    )
+
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User flow '{flow_name}' not found for user {user_id}"
+        )
+
+    db.delete(flow)
+    db.commit()
+
+    return {"detail": "DELETED"}
