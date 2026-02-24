@@ -139,26 +139,40 @@ async def add_dataset(
             detail=f"Dataset '{dataset_name}' already exists for this user."
         )
 
-@router.delete("/{dataset_name}", status_code=status.HTTP_410_GONE)
+@router.delete("/{dataset_name}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_dataset_by_name(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
     # Query the database for the entry
-    flow = (
-        db.query(UserFlows)
+    dataset = (
+        db.query(DataSets)
         .filter(
-            UserFlows.user_id == user_id,
-            UserFlows.flow_name == flow_name
+            DataSets.user_id == user_id,
+            DataSets.dataset_name == dataset_name
         )
         .first()
     )
 
-    if not flow:
+    if not dataset:
         raise HTTPException(
             status_code=404,
-            detail=f"User flow '{flow_name}' not found for user {user_id}"
+            detail=f"Data set '{dataset_name}' not found for user {user_id}"
         )
 
-    db.delete(flow)
+    file_loc = dataset.storage_path
+
+    if os.path.exists(file_loc):
+        os.remove(file_loc)
+        print(f"File '{file_loc}' has been deleted.")
+
+        with os.scandir(f"bucket/csv/{user_id}/") as entries:
+            if not any(entries):
+                os.rmdir(f"bucket/csv/{user_id}/")
+            else:
+                print(f"user Folder 'bucket/csv/{user_id}/' does not exist.")
+    else:
+        print(f"File '{file_loc}' does not exist.")
+
+    db.delete(dataset)
     db.commit()
 
     return {"detail": "DELETED"}
