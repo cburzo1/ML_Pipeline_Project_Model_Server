@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, status, HTTPException, Header
 from pandas import Categorical
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
 from models.user_flow import UserFlows
+from models.datasets import DataSets
 from models.user_flow_update import UserFlowUpdate
 from schemas.config_schema import ConfigSchema
 from pydantic import BaseModel, ValidationError
@@ -32,6 +33,8 @@ router = APIRouter(
 class UserFlowBase(BaseModel):
     #user_id: int
     flow_name: str
+    dataset_name: str
+    #dataset_id: str
     config_json: ConfigSchema
 
 # Dependency
@@ -104,7 +107,22 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency, user_id: 
             detail=f"User '{user_id}' not found"
         )'''
 
-    db_user_flow = UserFlows(**user_flow.model_dump())
+    dataset = (
+        db.query(DataSets)
+        .filter(
+            DataSets.user_id == user_id,
+            DataSets.dataset_name == user_flow.dataset_name
+        )
+        .first()
+    )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset '{user_flow.dataset_name}' not found"
+        )
+
+    db_user_flow = UserFlows(user_id=user_id,dataset_id=dataset.id, **user_flow.model_dump())
     db.add(db_user_flow)
 
     try:
@@ -115,6 +133,8 @@ async def create_user_flow(user_flow: UserFlowBase, db: db_dependency, user_id: 
             "id": db_user_flow.id,
             "user_id": db_user_flow.user_id,
             "flow_name": db_user_flow.flow_name,
+            "dataset_name":db_user_flow.dataset_name,
+            "dataset_id": dataset.id,
             "config_json": db_user_flow.config_json,
             "created_at": db_user_flow.created_at,
             "message": "User flow created successfully"
@@ -217,7 +237,7 @@ async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_depen
         }
     }
 
-class FeatureType(str, Enum):
+'''class FeatureType(str, Enum):
     NUMERICAL = "numerical"
     CATEGORICAL = "categorical"
     BOOLEAN = "boolean"
@@ -248,9 +268,9 @@ def infer_feature_type(col: pd.Series) -> FeatureType:
         return FeatureType.TEXT
 
     # Safe default
-    return FeatureType.TEXT
+    return FeatureType.TEXT'''
 
-@router.post("/train/{flow_name}", status_code=status.HTTP_200_OK)
+'''@router.post("/train/{flow_name}", status_code=status.HTTP_200_OK)
 async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     # Locate the correct flow
     flow = db.query(UserFlows).filter(
@@ -266,24 +286,15 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
 
     if flow.config_json.get('algorithm') == "Linear Regression":
         print("linear regression")
+        user_folder = f"bucket/csv/{user_id}"
+        dataset_name = flow.config_json.get("dataset_name")
 
-        dataset = pd.read_csv("dummy_dataset_missing_data.csv")
+        dataset = pd.read_csv(f"{user_folder}/{dataset_name}.csv")
 
         column_X = flow.config_json.get("data_range_X")
         column_y = flow.config_json.get("data_range_y")
 
-        # Too remove. Redundant
-        '''if not column_X:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing required field: data_range_X"
-            )
-
-        if not column_y:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing required field: data_range_y"
-            )'''
+     
 
         # Existence checks
         missing = []
@@ -384,4 +395,4 @@ async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(
         raise HTTPException(
             status_code=404,
             detail="your algorithm does not exist in our collection"
-        )
+        )'''

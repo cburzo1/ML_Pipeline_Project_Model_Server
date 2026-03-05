@@ -12,6 +12,7 @@ class ConfigSchema(BaseModel):
     #data_range_y: tuple[int, int]
     data_range_X: str  # required
     data_range_y: str
+    #dataset_name: str
 
     row_range: Optional[tuple[int, int]] = None
 
@@ -19,10 +20,10 @@ class ConfigSchema(BaseModel):
         Literal["drop", "mean", "median", "most_frequent", "none"]
     ] = None
 
-    order_encoding: Optional[bool] = None
+    #order_encoding: Optional[bool] = None
 
     test_size: Optional[float] = None
 
-    scaling: Optional[
+    '''scaling: Optional[
         Literal["none", "standardization", "normalization"]
-    ] = None
+    ] = None'''

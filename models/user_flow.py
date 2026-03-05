@@ -11,6 +11,8 @@ class UserFlows(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     user_id = Column(BIGINT)
     flow_name = Column(String(128))
+    dataset_name = Column(String(128))
+    dataset_id =  Column(String(36))
     config_json = Column(MutableDict.as_mutable(JSON))
     created_at = Column(DateTime, default=func.now())
 
