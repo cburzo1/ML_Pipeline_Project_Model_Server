@@ -17,7 +17,7 @@ class ConfigSchema(BaseModel):
     row_range: Optional[tuple[int, int]] = None
 
     missing_data: Optional[
-        Literal["drop", "mean", "median", "most_frequent", "none"]
+        Literal["mean", "constant", "most_frequent", "median"]
     ] = None
 
     #order_encoding: Optional[bool] = None

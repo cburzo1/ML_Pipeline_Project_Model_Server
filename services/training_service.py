@@ -11,10 +11,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sqlalchemy.orm import Session
 
+from models.datasets import DataSets
 from models.user_flow import UserFlows
 from routers.userflow import db_dependency, get_current_user_id
 
-class FeatureType(str, Enum):
+'''class FeatureType(str, Enum):
     NUMERICAL = "numerical"
     CATEGORICAL = "categorical"
     BOOLEAN = "boolean"
@@ -45,7 +46,7 @@ def infer_feature_type(col: pd.Series) -> FeatureType:
         return FeatureType.TEXT
 
     # Safe default
-    return FeatureType.TEXT
+    return FeatureType.TEXT '''
 
 
 def train_model(flow_name: str, user_id: int, db: Session):
@@ -61,12 +62,22 @@ def train_model(flow_name: str, user_id: int, db: Session):
             detail=f"Flow '{flow_name}' for user {user_id} not found."
         )
 
+    data_set = db.query(DataSets).filter(
+        DataSets.dataset_name == flow.dataset_name
+    ).first()
+
+    if not data_set:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flow '{flow.dataset_name}' for user {user_id} not found."
+        )
+
     if flow.config_json.get('algorithm') == "Linear Regression":
         print("linear regression")
-        user_folder = f"bucket/csv/{user_id}"
-        dataset_name = flow.dataset_name
+        user_file = data_set.storage_path
+        #dataset_name = flow.dataset_name
 
-        dataset = pd.read_csv(f"{user_folder}/{dataset_name}.csv")
+        dataset = pd.read_csv(user_file)
 
         column_X = flow.config_json.get("data_range_X")
         column_y = flow.config_json.get("data_range_y")
@@ -115,14 +126,16 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
         if dataset.columns[Col_X] in dataset.columns.values:
             X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
-            DTYPE_X = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_X])
+            DTYPE_X = data_set.column_schema.get(column_X) #infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_X])
             y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
-            DTYPE_y = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_y])
+            DTYPE_y = data_set.column_schema.get(column_y)#infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_y])
 
             print("COLS: ", X, y)
 
-            if DTYPE_X == "text" or DTYPE_y == "text":
-                if DTYPE_X == "text":
+            print("COL SCHEMA::",data_set.column_schema.get(column_X))
+
+            if DTYPE_X == "object" or DTYPE_y == "object":
+                if DTYPE_X == "object":
                     ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
                     X = np.array(ct.fit_transform(X).toarray())
                 else:
