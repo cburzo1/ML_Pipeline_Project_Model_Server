@@ -91,6 +91,31 @@ async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Dep
         "created_at": flow.created_at
     }
 
+@router.get("/", status_code=status.HTTP_200_OK)
+async def get_user_flows(db: db_dependency, user_id: int = Depends(get_current_user_id)):
+    # Query the database for the given flow name
+    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+
+    flows = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id
+        ).all()
+    )
+
+    if not flows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"user {user_id} has no datasets on record."
+        )
+
+    flow_list = []
+
+    for flow in flows:
+        flow_list.append([flow.flow_name, flow.created_at])
+
+    return flow_list
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user_flow(user_flow: UserFlowBase, db: db_dependency, user_id: int = Depends(get_current_user_id)):
     '''flow = (
