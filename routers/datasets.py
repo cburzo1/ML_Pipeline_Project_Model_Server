@@ -105,7 +105,7 @@ async def add_dataset(
     user_id: int = Depends(get_current_user_id)
 ):
     if file.filename.lower().endswith(".csv"):
-        user_folder = f"bucket/csv/{user_id}"
+        user_folder = f"bucket/{user_id}/csv"
         os.makedirs(user_folder, exist_ok=True)
         file_loc = f"{user_folder}/{dataset_name}.csv"
 
@@ -120,12 +120,13 @@ async def add_dataset(
     dataset = pd.read_csv(file_loc)
     row_count = len(dataset)
     schema = {col: str(dtype) for col, dtype in dataset.dtypes.items()}
+    relative_file_loc = f"/{user_id}/csv/{dataset_name}"
 
     new_dataset = DataSets(
         user_id=user_id,
         dataset_name=dataset_name,
         description = description,
-        storage_path=file_loc,
+        storage_path=relative_file_loc,
         row_count = row_count,
         column_schema = schema
     )
@@ -158,17 +159,17 @@ async def delete_dataset_by_name(dataset_name: str, db: db_dependency, user_id: 
             detail=f"Data set '{dataset_name}' not found for user {user_id}"
         )
 
-    file_loc = dataset.storage_path
+    file_loc = f"bucket/{dataset.storage_path}.csv"
 
     if os.path.exists(file_loc):
         os.remove(file_loc)
         print(f"File '{file_loc}' has been deleted.")
 
-        with os.scandir(f"bucket/csv/{user_id}/") as entries:
+        with os.scandir(f"bucket/{user_id}/csv") as entries:
             if not any(entries):
-                os.rmdir(f"bucket/csv/{user_id}/")
+                os.rmdir(f"bucket/{user_id}/csv")
             else:
-                print(f"user Folder 'bucket/csv/{user_id}/' does not exist.")
+                print(f"user Folder 'bucket/{user_id}/csv' does not exist.")
     else:
         print(f"File '{file_loc}' does not exist.")
 

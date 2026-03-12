@@ -74,7 +74,7 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
     if flow.config_json.get('algorithm') == "Linear Regression":
         print("linear regression")
-        user_file = data_set.storage_path
+        user_file = f"bucket/{data_set.storage_path}.csv"
         #dataset_name = flow.dataset_name
 
         dataset = pd.read_csv(user_file)
