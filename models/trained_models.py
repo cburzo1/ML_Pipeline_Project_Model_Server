@@ -8,11 +8,11 @@ from sqlalchemy.dialects.postgresql import JSON
 class TrainedModels(Base):
     __tablename__ = 'trained_models'
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    flow_id = Column(BIGINT)
+    id = Column(String(36), primary_key=True, index=True)
+    flow_id = Column(String(36))
     model_type = Column(String(128))
     model_path =  Column(String(255))
     metrics_json = Column(MutableDict.as_mutable(JSON))
     trained_at = Column(DateTime, default=func.now())
 
-    #__table_args__ = (UniqueConstraint("user_id", "flow_name"),)
+    __table_args__ = (UniqueConstraint("model_path", name="uq_trainedmodels_model_path"),)

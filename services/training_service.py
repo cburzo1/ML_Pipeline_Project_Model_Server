@@ -1,5 +1,8 @@
+import os
+import uuid
 from enum import Enum
 
+import joblib
 import numpy as np
 import pandas as pd
 from fastapi import Depends, HTTPException
@@ -9,10 +12,12 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.datasets import DataSets
 from models.user_flow import UserFlows
+from models.trained_models import TrainedModels
 from routers.userflow import db_dependency, get_current_user_id
 
 '''class FeatureType(str, Enum):
@@ -158,6 +163,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
             )
 
+        model = 0
+
         if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
 
@@ -184,9 +191,30 @@ def train_model(flow_name: str, user_id: int, db: Session):
             regressor = LinearRegression()
             regressor.fit(X_train, y_train)
 
+            model_id = str(uuid.uuid4())
+
+            model_dir = f"bucket/{user_id}/trained_models"
+            os.makedirs(model_dir, exist_ok=True)
+
+            model_path = f"{model_dir}/model_{model_id}.pkl"
+
+            joblib.dump(model, model_path)
+
             y_pred = regressor.predict(X_test)
 
             print("PREDICTIONS", y_pred)
+
+            new_trained_model = TrainedModels(
+                id=model_id,
+                flow_id=flow.id,
+                model_type=flow.config_json.get('algorithm'),
+                model_path=model_path
+            )
+
+            # try:
+            db.add(new_trained_model)
+            db.commit()
+
         else:
             raise HTTPException(
                 status_code=400,
@@ -196,3 +224,9 @@ def train_model(flow_name: str, user_id: int, db: Session):
         raise HTTPException(
             status_code=404,
             detail="your algorithm does not exist in our collection")
+
+''' except IntegrityError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dataset '{dataset_name}' already exists for this user."
+        )'''
