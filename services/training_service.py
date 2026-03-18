@@ -1,3 +1,4 @@
+import inspect
 import os
 import uuid
 from enum import Enum
@@ -19,6 +20,7 @@ from models.datasets import DataSets
 from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
 from routers.userflow import db_dependency, get_current_user_id
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 '''class FeatureType(str, Enum):
     NUMERICAL = "numerical"
@@ -204,11 +206,23 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
             print("PREDICTIONS", y_pred)
 
+            mae = mean_absolute_error(y_test, y_pred)
+            rmse = mean_squared_error(y_test, y_pred)
+            print(rmse)
+            r2 = r2_score(y_test, y_pred)
+
+            metrics = {
+                "mae": mae,
+                "rmse": rmse,
+                "r2": r2
+            }
+
             new_trained_model = TrainedModels(
                 id=model_id,
                 flow_id=flow.id,
                 model_type=flow.config_json.get('algorithm'),
-                model_path=model_path
+                model_path=model_path,
+                metrics_json=metrics
             )
 
             # try:
