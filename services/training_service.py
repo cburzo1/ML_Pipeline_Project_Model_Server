@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from models.datasets import DataSets
 from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
+from models.training_data import TrainingData
 from routers.userflow import db_dependency, get_current_user_id
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
@@ -187,8 +188,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
             print("TRAINING DATA AFTER:::", X_train)
             print("TRAINING DATA AFTER:::", X_test)
             print("---------------------------------------------------------------")
-            print("TRAINING DATA BEFORE:::", y_train)
-            print("TRAINING DATA BEFORE:::", y_test)
+            print("TRAINING DATA AFTER:::", y_train)
+            print("TRAINING DATA AFTER:::", y_test)
 
             regressor = LinearRegression()
             regressor.fit(X_train, y_train)
@@ -228,6 +229,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
             # try:
             db.add(new_trained_model)
             db.commit()
+
+
 
         else:
             raise HTTPException(
