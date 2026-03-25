@@ -166,8 +166,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
             )
 
-        model = 0
-
         if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
 
@@ -201,8 +199,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
             model_path = f"{model_dir}/model_{model_id}.pkl"
 
-            joblib.dump(model, model_path)
-
             y_pred = regressor.predict(X_test)
 
             print("PREDICTIONS", y_pred)
@@ -217,6 +213,17 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 "rmse": rmse,
                 "r2": r2
             }
+
+            model_bundle = {
+                "model": regressor,
+                "scaling": sc
+            }
+
+            joblib.dump(model_bundle, model_path)
+
+            bundle = joblib.load(model_path)
+
+            print("FROM BUNDLE:: ", bundle.get("model").predict(X_test))
 
             new_trained_model = TrainedModels(
                 id=model_id,
