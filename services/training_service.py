@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 from models.datasets import DataSets
 from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
-from models.training_data import TrainingData
 from routers.userflow import db_dependency, get_current_user_id
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
@@ -117,6 +116,9 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 detail=f"Invalid column(s): {missing}. Available columns: {list(dataset.columns)}"
             )
 
+        column_name_list = []
+        column_name_list.append(column_X)
+
         # Safe indexing
         Col_X = dataset.columns.get_loc(column_X)
         Col_y = dataset.columns.get_loc(column_y)
@@ -127,7 +129,9 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
         print(rows)
 
-        print(dataset.columns.values, dataset.columns[Col_X])
+        r = dataset.drop(columns=[column_y])
+
+        print(dataset.columns.values, r.columns.values)
 
         X = None
         y = None
@@ -214,9 +218,12 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 "r2": r2
             }
 
+            #arr.append("Feature2")
+
             model_bundle = {
                 "model": regressor,
-                "scaling": sc
+                "scaling": sc,
+                "feature_order": column_name_list #r.columns.values
             }
 
             joblib.dump(model_bundle, model_path)
@@ -228,6 +235,7 @@ def train_model(flow_name: str, user_id: int, db: Session):
             new_trained_model = TrainedModels(
                 id=model_id,
                 flow_id=flow.id,
+                user_id=user_id,
                 model_type=flow.config_json.get('algorithm'),
                 model_path=model_path,
                 metrics_json=metrics
@@ -236,8 +244,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
             # try:
             db.add(new_trained_model)
             db.commit()
-
-
 
         else:
             raise HTTPException(
