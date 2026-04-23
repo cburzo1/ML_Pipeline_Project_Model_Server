@@ -22,39 +22,54 @@ from models.trained_models import TrainedModels
 from routers.userflow import db_dependency, get_current_user_id
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-'''class FeatureType(str, Enum):
-    NUMERICAL = "numerical"
-    CATEGORICAL = "categorical"
-    BOOLEAN = "boolean"
-    DATETIME = "datetime"
-    TEXT = "text"
+def delete_model(model_id: str, user_id: int, db: Session):
+    trained_model = db.query(TrainedModels).filter(
+        TrainedModels.user_id == user_id,
+        TrainedModels.id == model_id
+    ).first()
 
-def infer_feature_type(col: pd.Series) -> FeatureType:
-    dtype = col.dtype
+    if not trained_model:
+        raise HTTPException(
+            status_code=404,
+            detail=f"model '{model_id}' for user {user_id} not found."
+        )
 
-    if is_bool_dtype(dtype):
-        return FeatureType.BOOLEAN
+    file_loc = f"bucket/{trained_model.model_path}"
 
-    if is_numeric_dtype(dtype):
-        return FeatureType.NUMERICAL
+    if os.path.exists(file_loc):
+        os.remove(file_loc)
+        print(f"File '{file_loc}' has been deleted.")
 
-    if isinstance(dtype, pd.CategoricalDtype):
-        return FeatureType.CATEGORICAL
+        with os.scandir(f"bucket/{user_id}/trained_models") as entries:
+            if not any(entries):
+                os.rmdir(f"bucket/{user_id}/trained_models")
+            else:
+                print(f"user Folder 'bucket/{user_id}/trained_models' does not exist.")
+    else:
+        print(f"File '{file_loc}' does not exist.")
 
-    if is_datetime64_any_dtype(dtype):
-        return FeatureType.DATETIME
+    db.delete(trained_model)
+    db.commit()
 
-    # object fallback (strings, mixed)
-    if is_object_dtype(dtype):
-        # optional heuristic
-        unique_ratio = col.nunique(dropna=True) / max(len(col), 1)
-        if unique_ratio < 0.2:
-            return FeatureType.CATEGORICAL
-        return FeatureType.TEXT
+    return {"detail": "DELETED"}
 
-    # Safe default
-    return FeatureType.TEXT '''
+def get_all_models(user_id: int, db: Session):
+    trained_models = db.query(TrainedModels).filter(
+        TrainedModels.user_id == user_id
+    ).all()
 
+    if not trained_models:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No registered models exist."
+        )
+
+    trained_models_list = []
+
+    for i in range(0, len(trained_models)):
+        trained_models_list.append(f"Model :: {trained_models[i].id}")
+
+    return trained_models_list
 
 def train_model(flow_name: str, user_id: int, db: Session):
     # Locate the correct flow
@@ -203,6 +218,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
             model_path = f"{model_dir}/model_{model_id}.pkl"
 
+            relative_file_loc = f"/{user_id}/trained_models/model_{model_id}.pkl"
+
             y_pred = regressor.predict(X_test)
 
             print("PREDICTIONS", y_pred)
@@ -237,7 +254,7 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 flow_id=flow.id,
                 user_id=user_id,
                 model_type=flow.config_json.get('algorithm'),
-                model_path=model_path,
+                model_path=relative_file_loc, #model_path
                 metrics_json=metrics
             )
 

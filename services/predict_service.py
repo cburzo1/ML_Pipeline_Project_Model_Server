@@ -37,6 +37,9 @@ def predict_model(model_id: str, input_data: dict, user_id: int, db: Session):
 
     user_input_columns = list(input_data[0].keys())
 
+    if not input_data:
+        raise HTTPException(400, "No input data provided")
+
     print(user_input_columns)
 
     if set(user_input_columns) != set(feature_order_columns):
@@ -94,6 +97,9 @@ def predict_model_csv(model_id: str, file, user_id: int, db: Session):
 
     df = pd.read_csv(file.file)
 
+    if df.empty:
+        raise HTTPException(400, "CSV file is empty")
+
     data_dict = df.to_dict(orient='records')
 
     print(data_dict)
@@ -108,13 +114,22 @@ def predict_model_csv(model_id: str, file, user_id: int, db: Session):
 
     X = []
 
-    for row in data_dict:
+    for i, row in enumerate(data_dict):
         row_values = []
+
         for f in feature_order_columns:
             if f not in row:
-                raise HTTPException(400, f"Missing feature: {f}")
+                raise HTTPException(400, f"Row {i}: Missing feature '{f}'")
 
-            row_values.append(float(row[f]))
+            if pd.isna(row[f]) or row[f] == "":
+                raise HTTPException(400, f"Row {i}: Missing value for '{f}'")
+
+            try:
+                value = float(row[f])
+            except:
+                raise HTTPException(400, f"Row {i}: Invalid type for '{f}'")
+
+            row_values.append(value)
 
         X.append(row_values)
 
