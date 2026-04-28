@@ -1,32 +1,22 @@
-import os
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException, Header, Form, File, UploadFile
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
-from models.datasets import DataSets
-from pydantic import BaseModel, ValidationError
 from database import SessionLocal
 from sqlalchemy.orm import Session
-from enum import Enum
 
-import pandas as pd
+from services.datasets_service import get_all_datasets, get_dataset_by_name, create_dataset, delete_dataset
 
 router = APIRouter(
     prefix="/datasets",
     tags=["DataSets"]
 )
 
-'''class DataSetsBase(BaseModel):
-    dataset_name: str
-    users_csv_file: bytes'''
-
-# Dependency
 def get_db():
     db = SessionLocal()
     try:
         yield db
-        db.commit()   # commit here if no exception
+        db.commit()
     except:
-        db.rollback()  # rollback on any exception
+        db.rollback()
         raise
     finally:
         db.close()
@@ -46,134 +36,31 @@ def get_current_user_id(x_api_key: str = Header(None)):
     return USER_KEYS[x_api_key]
 
 @router.get("/{dataset_name}", status_code=status.HTTP_200_OK)
-async def get_dataset_by_name(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    dataset = (
-        db.query(DataSets)
-        .filter(
-            DataSets.user_id == user_id,
-            DataSets.dataset_name == dataset_name
-        )
-        .first()
-    )
+async def get_datasets(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail=f"the dataset '{dataset_name}' not found"
-        )
+    result = get_dataset_by_name(dataset_name, user_id, db)
 
-    return {
-        "id": dataset.id,
-        "user_id": dataset.user_id,
-        "flow_name": dataset.dataset_name,
-        "description": dataset.description,
-        "row_count": dataset.row_count,
-        "created_at": dataset.created_at
-    }
+    return result
+
 
 @router.get("/", status_code=status.HTTP_200_OK)
-async def get_datasets(db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    # Query the database for the given flow name
-    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+async def list_datasets(db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
-    datasets = (
-        db.query(DataSets)
-        .filter(
-            DataSets.user_id == user_id
-        ).all()
-    )
+    result = get_all_datasets(user_id, db)
 
-    if not datasets:
-        raise HTTPException(
-            status_code=404,
-            detail=f"user {user_id} has no datasets on record."
-        )
-
-    dataset_list = []
-
-    for dataset in datasets:
-        dataset_list.append([dataset.dataset_name, dataset.created_at])
-
-    return dataset_list
+    return result
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def add_dataset(
-    db: db_dependency,
-    dataset_name: str = Form(...),
-    description: str = Form(None),
-    file: UploadFile = File(...),
-    user_id: int = Depends(get_current_user_id)
-):
-    if file.filename.lower().endswith(".csv"):
-        user_folder = f"bucket/{user_id}/csv"
-        os.makedirs(user_folder, exist_ok=True)
-        file_loc = f"{user_folder}/{dataset_name}.csv"
+async def create_datasets(db: db_dependency, dataset_name: str = Form(...), description: str = Form(None), file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
 
-        with open(file_loc, "wb") as buffer:
-            buffer.write(await file.read())
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Only CSV files are allowed."
-        )
+    result = create_dataset(user_id, db, dataset_name, description, file)
 
-    dataset = pd.read_csv(file_loc)
-    row_count = len(dataset)
-    schema = {col: str(dtype) for col, dtype in dataset.dtypes.items()}
-    relative_file_loc = f"/{user_id}/csv/{dataset_name}"
+    return result
 
-    new_dataset = DataSets(
-        user_id=user_id,
-        dataset_name=dataset_name,
-        description = description,
-        storage_path=relative_file_loc,
-        row_count = row_count,
-        column_schema = schema
-    )
-
-    try:
-        db.add(new_dataset)
-        db.commit()
-    except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dataset '{dataset_name}' already exists for this user."
-        )
 
 @router.delete("/{dataset_name}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_dataset_by_name(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def delete_datasets(dataset_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
-    # Query the database for the entry
-    dataset = (
-        db.query(DataSets)
-        .filter(
-            DataSets.user_id == user_id,
-            DataSets.dataset_name == dataset_name
-        )
-        .first()
-    )
+    result = delete_dataset(dataset_name, user_id, db)
 
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Data set '{dataset_name}' not found for user {user_id}"
-        )
-
-    file_loc = f"bucket/{dataset.storage_path}.csv"
-
-    if os.path.exists(file_loc):
-        os.remove(file_loc)
-        print(f"File '{file_loc}' has been deleted.")
-
-        with os.scandir(f"bucket/{user_id}/csv") as entries:
-            if not any(entries):
-                os.rmdir(f"bucket/{user_id}/csv")
-            else:
-                print(f"user Folder 'bucket/{user_id}/csv' does not exist.")
-    else:
-        print(f"File '{file_loc}' does not exist.")
-
-    db.delete(dataset)
-    db.commit()
-
-    return {"detail": "DELETED"}
+    return result

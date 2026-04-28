@@ -73,7 +73,7 @@ def predict_model(model_id: str, input_data: dict, user_id: int, db: Session):
         "latency_ms": round(latency, 3)
     }
 
-def predict_model_csv(model_id: str, file, user_id: int, db: Session):
+def predict_csv(model_id: str, file, user_id: int, db: Session):
     trained_model = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
         TrainedModels.id == model_id
