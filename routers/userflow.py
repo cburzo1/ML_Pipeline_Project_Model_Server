@@ -1,29 +1,11 @@
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException, Header
-from pandas import Categorical
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError, DBAPIError
-from models.user_flow import UserFlows
-from models.datasets import DataSets
 from models.user_flow_update import UserFlowUpdate
 from schemas.config_schema import ConfigSchema
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from database import SessionLocal
 from sqlalchemy.orm import Session
-from enum import Enum
-
-import numpy as np
-import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from pandas.api.types import (
-    is_numeric_dtype,
-    is_bool_dtype,
-    is_datetime64_any_dtype,
-    is_object_dtype
-)
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.impute import SimpleImputer
+from services.userflow_service import get_by_flowname, get_userflows, create_userflow, delete_userflow_by_name, update_userflow
 
 router = APIRouter(
     prefix="/user_flows",
@@ -31,20 +13,17 @@ router = APIRouter(
 )
 
 class UserFlowBase(BaseModel):
-    #user_id: int
     flow_name: str
     dataset_name: str
-    #dataset_id: str
     config_json: ConfigSchema
 
-# Dependency
 def get_db():
     db = SessionLocal()
     try:
         yield db
-        db.commit()   # commit here if no exception
+        db.commit()
     except:
-        db.rollback()  # rollback on any exception
+        db.rollback()
         raise
     finally:
         db.close()
@@ -65,359 +44,33 @@ def get_current_user_id(x_api_key: str = Header(None)):
 
 @router.get("/{flow_name}", status_code=status.HTTP_200_OK)
 async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    # Query the database for the given flow name
-    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
+    result = get_by_flowname(flow_name, db, user_id)
 
-    flow = (
-        db.query(UserFlows)
-        .filter(
-            UserFlows.user_id == user_id,
-            UserFlows.flow_name == flow_name
-        )
-        .first()
-    )
-
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"User flow '{flow_name}' not found"
-        )
-
-    return {
-        "id": flow.id,
-        "user_id": flow.user_id,
-        "flow_name": flow.flow_name,
-        "config_json": flow.config_json,
-        "created_at": flow.created_at
-    }
+    return result
 
 @router.get("/", status_code=status.HTTP_200_OK)
 async def get_user_flows(db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    # Query the database for the given flow name
-    #flow = db.query(UserFlows).filter(UserFlows.flow_name == flow_name).first()
 
-    flows = (
-        db.query(UserFlows)
-        .filter(
-            UserFlows.user_id == user_id
-        ).all()
-    )
+    result = get_userflows(db, user_id, )
 
-    if not flows:
-        raise HTTPException(
-            status_code=404,
-            detail=f"user {user_id} has no datasets on record."
-        )
-
-    flow_list = []
-
-    for flow in flows:
-        flow_list.append([flow.flow_name, flow.created_at])
-
-    return flow_list
+    return result
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user_flow(user_flow: UserFlowBase, db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    '''flow = (
-        db.query(UserFlows)
-        .filter(
-            UserFlows.user_id == user_id
-        )
-        .first()
-    )
 
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"User '{user_id}' not found"
-        )'''
+    result = create_userflow(user_flow, db, user_id)
 
-    dataset = (
-        db.query(DataSets)
-        .filter(
-            DataSets.user_id == user_id,
-            DataSets.dataset_name == user_flow.dataset_name
-        )
-        .first()
-    )
-
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Dataset '{user_flow.dataset_name}' not found"
-        )
-
-    db_user_flow = UserFlows(user_id=user_id,dataset_id=dataset.id, **user_flow.model_dump())
-    db.add(db_user_flow)
-
-    try:
-        db.commit()
-        db.refresh(db_user_flow)
-
-        return {
-            "id": db_user_flow.id,
-            "user_id": db_user_flow.user_id,
-            "flow_name": db_user_flow.flow_name,
-            "dataset_name":db_user_flow.dataset_name,
-            "dataset_id": dataset.id,
-            "config_json": db_user_flow.config_json,
-            "created_at": db_user_flow.created_at,
-            "message": "User flow created successfully"
-        }
-
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="A flow with this name already exists!"
-        )
-
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}"
-        )
+    return result
 
 @router.delete("/{flow_name}", status_code=status.HTTP_410_GONE)
 async def delete_user_flow_by_name(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
-    # Query the database for the entry
-    flow = (
-        db.query(UserFlows)
-        .filter(
-            UserFlows.user_id == user_id,
-            UserFlows.flow_name == flow_name
-        )
-        .first()
-    )
+    result = delete_userflow_by_name(flow_name, db, user_id)
 
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"User flow '{flow_name}' not found for user {user_id}"
-        )
-
-    db.delete(flow)
-    db.commit()
-
-    return {"detail": "DELETED"}
-
-def deep_merge(old: dict, new: dict):
-    """Recursively merge two dictionaries."""
-    for key, value in new.items():
-        if isinstance(value, dict) and isinstance(old.get(key), dict):
-            deep_merge(old[key], value)
-        else:
-            old[key] = value
-    return old
+    return result
 
 @router.patch("/{flow_name}", status_code=status.HTTP_200_OK)
 async def update_user_flow(flow_name: str, updates: UserFlowUpdate, db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    # Locate the correct flow
-    flow = db.query(UserFlows).filter(
-        UserFlows.user_id == user_id,
-        UserFlows.flow_name == flow_name
-    ).first()
+    result = update_userflow(flow_name, updates, db, user_id)
 
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Flow '{flow_name}' for user {user_id} not found."
-        )
-
-    # Apply updates
-    if updates.flow_name is not None:
-        flow.flow_name = updates.flow_name
-
-    '''if updates.config_json:
-        current_config = flow.config_json or {}
-        flow.config_json = deep_merge(current_config, updates.config_json)'''
-    if updates.config_json:
-        current_config = flow.config_json or {}
-        merged_config = deep_merge(current_config, updates.config_json)
-
-        try:
-            # THIS is where Literal validation happens
-            ConfigSchema.model_validate(merged_config)
-        except ValidationError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=e.errors()
-            )
-
-        flow.config_json = merged_config
-
-    db.commit()
-    db.refresh(flow)
-
-    return {
-        "message": "Flow updated",
-        "updated_flow": {
-            "id": flow.id,
-            "user_id": flow.user_id,
-            "flow_name": flow.flow_name,
-            "config_json": flow.config_json,
-            "created_at": flow.created_at
-        }
-    }
-
-'''class FeatureType(str, Enum):
-    NUMERICAL = "numerical"
-    CATEGORICAL = "categorical"
-    BOOLEAN = "boolean"
-    DATETIME = "datetime"
-    TEXT = "text"
-
-def infer_feature_type(col: pd.Series) -> FeatureType:
-    dtype = col.dtype
-
-    if is_bool_dtype(dtype):
-        return FeatureType.BOOLEAN
-
-    if is_numeric_dtype(dtype):
-        return FeatureType.NUMERICAL
-
-    if isinstance(dtype, pd.CategoricalDtype):
-        return FeatureType.CATEGORICAL
-
-    if is_datetime64_any_dtype(dtype):
-        return FeatureType.DATETIME
-
-    # object fallback (strings, mixed)
-    if is_object_dtype(dtype):
-        # optional heuristic
-        unique_ratio = col.nunique(dropna=True) / max(len(col), 1)
-        if unique_ratio < 0.2:
-            return FeatureType.CATEGORICAL
-        return FeatureType.TEXT
-
-    # Safe default
-    return FeatureType.TEXT'''
-
-'''@router.post("/train/{flow_name}", status_code=status.HTTP_200_OK)
-async def train_model(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
-    # Locate the correct flow
-    flow = db.query(UserFlows).filter(
-        UserFlows.user_id == user_id,
-        UserFlows.flow_name == flow_name
-    ).first()
-
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Flow '{flow_name}' for user {user_id} not found."
-        )
-
-    if flow.config_json.get('algorithm') == "Linear Regression":
-        print("linear regression")
-        user_folder = f"bucket/csv/{user_id}"
-        dataset_name = flow.config_json.get("dataset_name")
-
-        dataset = pd.read_csv(f"{user_folder}/{dataset_name}.csv")
-
-        column_X = flow.config_json.get("data_range_X")
-        column_y = flow.config_json.get("data_range_y")
-
-     
-
-        # Existence checks
-        missing = []
-        if column_X not in dataset.columns:
-            missing.append(column_X)
-
-        if column_y not in dataset.columns:
-            missing.append(column_y)
-
-        if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid column(s): {missing}. Available columns: {list(dataset.columns)}"
-            )
-
-        # Safe indexing
-        Col_X = dataset.columns.get_loc(column_X)
-        Col_y = dataset.columns.get_loc(column_y)
-
-        rows = flow.config_json.get('row_range')
-
-        print(Col_X, Col_y)
-
-        print(rows)
-
-        print(dataset.columns.values, dataset.columns[Col_X])
-
-        X = None
-        y = None
-
-        if dataset.columns[Col_X] in dataset.columns.values:
-            X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
-            DTYPE_X = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_X])
-            y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
-            DTYPE_y = infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_y])
-
-            print("COLS: ", X, y)
-
-            if DTYPE_X == "text" or DTYPE_y == "text":
-                if DTYPE_X == "text":
-                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
-                    X = np.array(ct.fit_transform(X).toarray())
-                else:
-                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
-                    y = np.array(ct.fit_transform(y).toarray())
-                print(X, "ENCODING APPLIED")
-
-            if flow.config_json.get("missing_data"):
-                imputer = SimpleImputer(missing_values=np.nan, strategy=flow.config_json.get("missing_data"))
-
-                imputer.fit(X)
-                X = imputer.transform(X)
-                imputer.fit(y)
-                y = imputer.transform(y)
-                print("IMPUTED!!::", X, y)
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
-            )
-
-        if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
-
-            sc = StandardScaler()
-
-            print("TRAINING DATA BEFORE:::", X_train)
-            print("TRAINING DATA BEFORE:::", X_test)
-            print("__________________________________________________________________")
-            print("TRAINING DATA BEFORE:::", y_train)
-            print("TRAINING DATA BEFORE:::", y_test)
-
-            X_train = sc.fit_transform(X_train)
-            X_test = sc.transform(X_test)
-            print("__________________________________________________________________")
-            y_train = sc.fit_transform(y_train)
-            y_test = sc.transform(y_test)
-
-            print("TRAINING DATA AFTER:::", X_train)
-            print("TRAINING DATA AFTER:::", X_test)
-            print("---------------------------------------------------------------")
-            print("TRAINING DATA BEFORE:::", y_train)
-            print("TRAINING DATA BEFORE:::", y_test)
-
-            regressor = LinearRegression()
-            regressor.fit(X_train, y_train)
-
-            y_pred = regressor.predict(X_test)
-
-            print("PREDICTIONS", y_pred)
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="your test_size parameter either does not exist or is invalid"
-            )
-    else:
-        raise HTTPException(
-            status_code=404,
-            detail="your algorithm does not exist in our collection"
-        )'''
+    return result

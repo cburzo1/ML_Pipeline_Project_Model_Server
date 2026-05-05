@@ -166,7 +166,15 @@ def delete_dataset(dataset_name: str, user_id: int, db: Session):
         os.remove(file_loc)
         print(f"File '{file_loc}' has been deleted.")
 
-        user_folder = f"bucket/{user_id}/csv"
+        user_folder_csv = f"bucket/{user_id}/csv"
+        user_folder = f"bucket/{user_id}"
+
+        if os.path.exists(user_folder_csv):
+            with os.scandir(user_folder_csv) as entries:
+                if not any(entries):
+                    os.rmdir(user_folder_csv)
+                else:
+                    print(f"Folder '{user_folder_csv}' is not empty.")
 
         if os.path.exists(user_folder):
             with os.scandir(user_folder) as entries:
@@ -174,6 +182,7 @@ def delete_dataset(dataset_name: str, user_id: int, db: Session):
                     os.rmdir(user_folder)
                 else:
                     print(f"Folder '{user_folder}' is not empty.")
+
     else:
         print(f"File '{file_loc}' does not exist.")
 
