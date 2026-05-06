@@ -1,25 +1,20 @@
-import inspect
 import os
 import uuid
-from enum import Enum
 
 import joblib
 import numpy as np
 import pandas as pd
-from fastapi import Depends, HTTPException
-from pandas.core.dtypes.common import is_bool_dtype, is_numeric_dtype, is_datetime64_any_dtype, is_object_dtype
+from fastapi import HTTPException
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.datasets import DataSets
 from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
-from routers.userflow import db_dependency, get_current_user_id
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 def delete_model(model_id: str, user_id: int, db: Session):
@@ -31,7 +26,7 @@ def delete_model(model_id: str, user_id: int, db: Session):
     if not trained_model:
         raise HTTPException(
             status_code=404,
-            detail=f"model '{model_id}' for user {user_id} not found."
+            detail=f"Model '{model_id}' not found."
         )
 
     file_loc = f"bucket/{trained_model.model_path}"
@@ -40,18 +35,38 @@ def delete_model(model_id: str, user_id: int, db: Session):
         os.remove(file_loc)
         print(f"File '{file_loc}' has been deleted.")
 
-        with os.scandir(f"bucket/{user_id}/trained_models") as entries:
-            if not any(entries):
-                os.rmdir(f"bucket/{user_id}/trained_models")
-            else:
-                print(f"user Folder 'bucket/{user_id}/trained_models' does not exist.")
     else:
         print(f"File '{file_loc}' does not exist.")
 
-    db.delete(trained_model)
-    db.commit()
+    trained_model_dir = f"bucket/{user_id}/trained_models"
 
-    return {"detail": "DELETED"}
+    if os.path.exists(trained_model_dir):
+        with os.scandir(trained_model_dir) as entries:
+            if not any(entries):
+                os.rmdir(trained_model_dir)
+            else:
+                print(f"Folder '{trained_model_dir}' is not empty.")
+
+    user_dir = f"bucket/{user_id}"
+
+    if os.path.exists(user_dir):
+        with os.scandir(user_dir) as entries:
+            if not any(entries):
+                os.rmdir(user_dir)
+            else:
+                print(f"Folder '{user_dir}' is not empty.")
+
+    try:
+        db.delete(trained_model)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete model"
+        )
+
+    return {"detail": "Model deleted"}
 
 def get_all_models(user_id: int, db: Session):
     trained_models = db.query(TrainedModels).filter(
@@ -59,19 +74,168 @@ def get_all_models(user_id: int, db: Session):
     ).all()
 
     if not trained_models:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No registered models exist."
-        )
+        return []
 
     trained_models_list = []
 
-    for i in range(0, len(trained_models)):
-        trained_models_list.append(f"Model :: {trained_models[i].id}")
+    for model in trained_models:
+        trained_models_list.append({
+            "model_id": model.id
+        })
 
     return trained_models_list
 
+def prepare_data(flow, data_set_meta):
+    user_file = f"bucket/{data_set_meta.storage_path}.csv"
+    df = pd.read_csv(user_file)
+
+    column_X = flow.config_json.get("data_range_X")
+    column_y = flow.config_json.get("data_range_y")
+
+    # Validate columns
+    missing = []
+    if column_X not in df.columns:
+        missing.append(column_X)
+    if column_y not in df.columns:
+        missing.append(column_y)
+
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid column(s): {missing}. Available columns: {list(df.columns)}"
+        )
+
+    rows = flow.config_json.get('row_range')
+
+    X = df.iloc[rows[0]:rows[1]][[column_X]].values
+    y = df.iloc[rows[0]:rows[1]][[column_y]].values
+
+    # Encoding (basic)
+    DTYPE_X = data_set_meta.column_schema.get(column_X)
+    DTYPE_y = data_set_meta.column_schema.get(column_y)
+
+    if DTYPE_X == "object":
+        ct = ColumnTransformer(
+            transformers=[('encoder', OneHotEncoder(), [0])],
+            remainder='passthrough'
+        )
+        X = np.array(ct.fit_transform(X).toarray())
+
+    if DTYPE_y == "object":
+        ct = ColumnTransformer(
+            transformers=[('encoder', OneHotEncoder(), [0])],
+            remainder='passthrough'
+        )
+        y = np.array(ct.fit_transform(y).toarray())
+
+    # Missing data
+    if flow.config_json.get("missing_data"):
+        imputer = SimpleImputer(
+            missing_values=np.nan,
+            strategy=flow.config_json.get("missing_data")
+        )
+        X = imputer.fit_transform(X)
+        y = imputer.fit_transform(y)
+
+    return X, y, [column_X]
+
+def train_linear_regression(X, y, flow):
+    test_size = flow.config_json.get("test_size")
+
+    if test_size is None or not (0 < test_size <= 1):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid test_size"
+        )
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=0
+    )
+
+    sc = StandardScaler()
+
+    X_train = sc.fit_transform(X_train)
+    X_test = sc.transform(X_test)
+    y_train = sc.fit_transform(y_train)
+    y_test = sc.transform(y_test)
+
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    metrics = {
+        "mae": mean_absolute_error(y_test, y_pred),
+        "rmse": mean_squared_error(y_test, y_pred),
+        "r2": r2_score(y_test, y_pred)
+    }
+
+    return model, sc, metrics
+
 def train_model(flow_name: str, user_id: int, db: Session):
+    flow = db.query(UserFlows).filter(
+        UserFlows.user_id == user_id,
+        UserFlows.flow_name == flow_name
+    ).first()
+
+    if not flow:
+        raise HTTPException(404, f"Flow '{flow_name}' not found")
+
+    data_set = db.query(DataSets).filter(
+        DataSets.dataset_name == flow.dataset_name
+    ).first()
+
+    if not data_set:
+        raise HTTPException(404, f"Dataset '{flow.dataset_name}' not found")
+
+    # Step 1: preprocess
+    X, y, feature_order = prepare_data(flow, data_set)
+
+    # Step 2: train model
+    if flow.config_json.get('algorithm') == "Linear Regression":
+        model, sc, metrics = train_linear_regression(X, y, flow)
+    else:
+        raise HTTPException(400, "Unsupported algorithm")
+
+    # Step 3: persist
+    model_id = str(uuid.uuid4())
+
+    model_dir = f"bucket/{user_id}/trained_models"
+    os.makedirs(model_dir, exist_ok=True)
+
+    model_path = f"{model_dir}/model_{model_id}.pkl"
+    relative_file_loc = f"/{user_id}/trained_models/model_{model_id}.pkl"
+
+    bundle = {
+        "model": model,
+        "scaling": sc,
+        "feature_order": feature_order
+    }
+
+    joblib.dump(bundle, model_path)
+
+    new_model = TrainedModels(
+        id=model_id,
+        flow_id=flow.id,
+        user_id=user_id,
+        model_type=flow.config_json.get('algorithm'),
+        model_path=relative_file_loc,
+        metrics_json=metrics
+    )
+
+    try:
+        db.add(new_model)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "Failed to save model")
+
+    return {
+        "model_id": model_id,
+        "metrics": metrics
+    }
+
+'''def train_model(flow_name: str, user_id: int, db: Session):
     # Locate the correct flow
     flow = db.query(UserFlows).filter(
         UserFlows.user_id == user_id,
@@ -95,29 +259,14 @@ def train_model(flow_name: str, user_id: int, db: Session):
         )
 
     if flow.config_json.get('algorithm') == "Linear Regression":
-        print("linear regression")
         user_file = f"bucket/{data_set.storage_path}.csv"
-        #dataset_name = flow.dataset_name
 
         dataset = pd.read_csv(user_file)
 
         column_X = flow.config_json.get("data_range_X")
         column_y = flow.config_json.get("data_range_y")
 
-        # Too remove. Redundant
-        '''if not column_X:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing required field: data_range_X"
-            )
 
-        if not column_y:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing required field: data_range_y"
-            )'''
-
-        # Existence checks
         missing = []
         if column_X not in dataset.columns:
             missing.append(column_X)
@@ -134,32 +283,20 @@ def train_model(flow_name: str, user_id: int, db: Session):
         column_name_list = []
         column_name_list.append(column_X)
 
-        # Safe indexing
         Col_X = dataset.columns.get_loc(column_X)
         Col_y = dataset.columns.get_loc(column_y)
 
         rows = flow.config_json.get('row_range')
-
-        print(Col_X, Col_y)
-
-        print(rows)
-
-        r = dataset.drop(columns=[column_y])
-
-        print(dataset.columns.values, r.columns.values)
 
         X = None
         y = None
 
         if dataset.columns[Col_X] in dataset.columns.values:
             X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
-            DTYPE_X = data_set.column_schema.get(column_X) #infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_X])
+            DTYPE_X = data_set.column_schema.get(column_X)
             y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
-            DTYPE_y = data_set.column_schema.get(column_y)#infer_feature_type(dataset.iloc[rows[0]:rows[1], Col_y])
+            DTYPE_y = data_set.column_schema.get(column_y)
 
-            print("COLS: ", X, y)
-
-            print("COL SCHEMA::",data_set.column_schema.get(column_X))
 
             if DTYPE_X == "object" or DTYPE_y == "object":
                 if DTYPE_X == "object":
@@ -168,7 +305,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 else:
                     ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
                     y = np.array(ct.fit_transform(y).toarray())
-                print(X, "ENCODING APPLIED")
 
             if flow.config_json.get("missing_data"):
                 imputer = SimpleImputer(missing_values=np.nan, strategy=flow.config_json.get("missing_data"))
@@ -177,7 +313,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 X = imputer.transform(X)
                 imputer.fit(y)
                 y = imputer.transform(y)
-                print("IMPUTED!!::", X, y)
 
         else:
             raise HTTPException(
@@ -190,23 +325,10 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
             sc = StandardScaler()
 
-            print("TRAINING DATA BEFORE:::", X_train)
-            print("TRAINING DATA BEFORE:::", X_test)
-            print("__________________________________________________________________")
-            print("TRAINING DATA BEFORE:::", y_train)
-            print("TRAINING DATA BEFORE:::", y_test)
-
             X_train = sc.fit_transform(X_train)
             X_test = sc.transform(X_test)
-            print("__________________________________________________________________")
             y_train = sc.fit_transform(y_train)
             y_test = sc.transform(y_test)
-
-            print("TRAINING DATA AFTER:::", X_train)
-            print("TRAINING DATA AFTER:::", X_test)
-            print("---------------------------------------------------------------")
-            print("TRAINING DATA AFTER:::", y_train)
-            print("TRAINING DATA AFTER:::", y_test)
 
             regressor = LinearRegression()
             regressor.fit(X_train, y_train)
@@ -222,11 +344,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
 
             y_pred = regressor.predict(X_test)
 
-            print("PREDICTIONS", y_pred)
-
             mae = mean_absolute_error(y_test, y_pred)
             rmse = mean_squared_error(y_test, y_pred)
-            print(rmse)
             r2 = r2_score(y_test, y_pred)
 
             metrics = {
@@ -235,19 +354,15 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 "r2": r2
             }
 
-            #arr.append("Feature2")
-
             model_bundle = {
                 "model": regressor,
                 "scaling": sc,
-                "feature_order": column_name_list #r.columns.values
+                "feature_order": column_name_list
             }
 
             joblib.dump(model_bundle, model_path)
 
             bundle = joblib.load(model_path)
-
-            print("FROM BUNDLE:: ", bundle.get("model").predict(X_test))
 
             new_trained_model = TrainedModels(
                 id=model_id,
@@ -258,7 +373,6 @@ def train_model(flow_name: str, user_id: int, db: Session):
                 metrics_json=metrics
             )
 
-            # try:
             db.add(new_trained_model)
             db.commit()
 
@@ -270,10 +384,4 @@ def train_model(flow_name: str, user_id: int, db: Session):
     else:
         raise HTTPException(
             status_code=404,
-            detail="your algorithm does not exist in our collection")
-
-''' except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dataset '{dataset_name}' already exists for this user."
-        )'''
+            detail="your algorithm does not exist in our collection")'''

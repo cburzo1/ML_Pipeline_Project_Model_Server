@@ -5,7 +5,6 @@ from database import SessionLocal
 from typing import Annotated
 
 from services.training_service import train_model, get_all_models, delete_model
-from routers.datasets import get_current_user_id
 
 router = APIRouter(
     prefix="/train",
@@ -34,21 +33,21 @@ def get_current_user_id(x_api_key: str = Header(None)):
     return USER_KEYS[x_api_key]
 
 @router.delete("/{model_id}", status_code=status.HTTP_200_OK)
-async def train(model_id: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def delete_trained_model(model_id: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
     result = delete_model(model_id, user_id, db)
 
     return result
 
 @router.get("/", status_code=status.HTTP_200_OK)
-async def train(db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def get_all_trained_models(db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
     result = get_all_models(user_id, db)
 
     return result
 
 @router.post("/{flow_name}", status_code=status.HTTP_200_OK)
-async def train(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def train_the_model(flow_name: str, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
     result = train_model(flow_name, user_id, db)
 

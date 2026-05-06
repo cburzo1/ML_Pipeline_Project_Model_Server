@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from typing import Annotated, Union, Dict, List
 
-from services.predict_service import predict_model, predict_csv
+from services.predict_service import predict_model, predict_using_csv
 
 router = APIRouter(
     prefix="/predict",
@@ -39,7 +39,7 @@ async def predict(model_id: str, db: db_dependency, input_data: Union[Dict, List
     return result
 
 @router.post("/{model_id}/csv", status_code=status.HTTP_200_OK)
-async def predict(model_id: str, db: db_dependency, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
-    result = predict_csv(model_id, file, user_id, db)
+async def predict_csv(model_id: str, db: db_dependency, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
+    result = predict_using_csv(model_id, file, user_id, db)
 
     return result

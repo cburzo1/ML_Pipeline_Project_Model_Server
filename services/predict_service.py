@@ -1,7 +1,4 @@
-import csv
 import time
-from typing import Union, Dict, List
-
 from fastapi import HTTPException
 import joblib
 from sqlalchemy.orm import Session
@@ -73,7 +70,7 @@ def predict_model(model_id: str, input_data: dict, user_id: int, db: Session):
         "latency_ms": round(latency, 3)
     }
 
-def predict_csv(model_id: str, file, user_id: int, db: Session):
+def predict_using_csv(model_id: str, file, user_id: int, db: Session):
     trained_model = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
         TrainedModels.id == model_id
