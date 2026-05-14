@@ -166,7 +166,7 @@ def train_linear_regression(X, y, flow):
 
     metrics = {
         "mae": mean_absolute_error(y_test, y_pred),
-        "rmse": mean_squared_error(y_test, y_pred),
+        "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
         "r2": r2_score(y_test, y_pred)
     }
 
@@ -209,7 +209,8 @@ def train_model(flow_name: str, user_id: int, db: Session):
     bundle = {
         "model": model,
         "scaling": sc,
-        "feature_order": feature_order
+        "feature_order": feature_order,
+        "metrics": metrics
     }
 
     joblib.dump(bundle, model_path)
@@ -234,154 +235,3 @@ def train_model(flow_name: str, user_id: int, db: Session):
         "model_id": model_id,
         "metrics": metrics
     }
-
-'''def train_model(flow_name: str, user_id: int, db: Session):
-    # Locate the correct flow
-    flow = db.query(UserFlows).filter(
-        UserFlows.user_id == user_id,
-        UserFlows.flow_name == flow_name
-    ).first()
-
-    if not flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Flow '{flow_name}' for user {user_id} not found."
-        )
-
-    data_set = db.query(DataSets).filter(
-        DataSets.dataset_name == flow.dataset_name
-    ).first()
-
-    if not data_set:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Flow '{flow.dataset_name}' for user {user_id} not found."
-        )
-
-    if flow.config_json.get('algorithm') == "Linear Regression":
-        user_file = f"bucket/{data_set.storage_path}.csv"
-
-        dataset = pd.read_csv(user_file)
-
-        column_X = flow.config_json.get("data_range_X")
-        column_y = flow.config_json.get("data_range_y")
-
-
-        missing = []
-        if column_X not in dataset.columns:
-            missing.append(column_X)
-
-        if column_y not in dataset.columns:
-            missing.append(column_y)
-
-        if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid column(s): {missing}. Available columns: {list(dataset.columns)}"
-            )
-
-        column_name_list = []
-        column_name_list.append(column_X)
-
-        Col_X = dataset.columns.get_loc(column_X)
-        Col_y = dataset.columns.get_loc(column_y)
-
-        rows = flow.config_json.get('row_range')
-
-        X = None
-        y = None
-
-        if dataset.columns[Col_X] in dataset.columns.values:
-            X = dataset.iloc[rows[0]:rows[1], Col_X:Col_X + 1].values
-            DTYPE_X = data_set.column_schema.get(column_X)
-            y = dataset.iloc[rows[0]:rows[1], Col_y:Col_y + 1].values
-            DTYPE_y = data_set.column_schema.get(column_y)
-
-
-            if DTYPE_X == "object" or DTYPE_y == "object":
-                if DTYPE_X == "object":
-                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
-                    X = np.array(ct.fit_transform(X).toarray())
-                else:
-                    ct = ColumnTransformer(transformers=[('encoder', OneHotEncoder(), [0])], remainder='passthrough')
-                    y = np.array(ct.fit_transform(y).toarray())
-
-            if flow.config_json.get("missing_data"):
-                imputer = SimpleImputer(missing_values=np.nan, strategy=flow.config_json.get("missing_data"))
-
-                imputer.fit(X)
-                X = imputer.transform(X)
-                imputer.fit(y)
-                y = imputer.transform(y)
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Your Feature either doesnt exist in the dataset or you did not specify a feature"
-            )
-
-        if flow.config_json.get('test_size') is not None and flow.config_json.get('test_size') > 0 or flow.config_json.get('test_size') <= 1:
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=flow.config_json.get('test_size'), random_state=0)
-
-            sc = StandardScaler()
-
-            X_train = sc.fit_transform(X_train)
-            X_test = sc.transform(X_test)
-            y_train = sc.fit_transform(y_train)
-            y_test = sc.transform(y_test)
-
-            regressor = LinearRegression()
-            regressor.fit(X_train, y_train)
-
-            model_id = str(uuid.uuid4())
-
-            model_dir = f"bucket/{user_id}/trained_models"
-            os.makedirs(model_dir, exist_ok=True)
-
-            model_path = f"{model_dir}/model_{model_id}.pkl"
-
-            relative_file_loc = f"/{user_id}/trained_models/model_{model_id}.pkl"
-
-            y_pred = regressor.predict(X_test)
-
-            mae = mean_absolute_error(y_test, y_pred)
-            rmse = mean_squared_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-
-            metrics = {
-                "mae": mae,
-                "rmse": rmse,
-                "r2": r2
-            }
-
-            model_bundle = {
-                "model": regressor,
-                "scaling": sc,
-                "feature_order": column_name_list
-            }
-
-            joblib.dump(model_bundle, model_path)
-
-            bundle = joblib.load(model_path)
-
-            new_trained_model = TrainedModels(
-                id=model_id,
-                flow_id=flow.id,
-                user_id=user_id,
-                model_type=flow.config_json.get('algorithm'),
-                model_path=relative_file_loc, #model_path
-                metrics_json=metrics
-            )
-
-            db.add(new_trained_model)
-            db.commit()
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="your test_size parameter either does not exist or is invalid"
-            )
-    else:
-        raise HTTPException(
-            status_code=404,
-            detail="your algorithm does not exist in our collection")'''

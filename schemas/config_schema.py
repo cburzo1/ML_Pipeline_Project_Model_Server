@@ -1,5 +1,5 @@
-from typing import Optional, List, Literal
-from pydantic import BaseModel, model_validator
+from typing import Optional, Literal
+from pydantic import BaseModel
 
 
 class ConfigSchema(BaseModel):
@@ -7,12 +7,9 @@ class ConfigSchema(BaseModel):
         "validate_assignment": True
     }
 
-    algorithm: str                              # required
-    #data_range_X: tuple[int, int]                 # required
-    #data_range_y: tuple[int, int]
-    data_range_X: str  # required
+    algorithm: str
+    data_range_X: str
     data_range_y: str
-    #dataset_name: str
 
     row_range: Optional[tuple[int, int]] = None
 
@@ -20,10 +17,4 @@ class ConfigSchema(BaseModel):
         Literal["mean", "constant", "most_frequent", "median"]
     ] = None
 
-    #order_encoding: Optional[bool] = None
-
     test_size: Optional[float] = None
-
-    '''scaling: Optional[
-        Literal["none", "standardization", "normalization"]
-    ] = None'''
