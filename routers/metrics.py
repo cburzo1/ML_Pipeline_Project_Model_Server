@@ -13,7 +13,8 @@ router = APIRouter(
 )
 
 class MetricsCompareRequest(BaseModel):
-    model_ids: List[str]
+    model_ida: str
+    model_idb: str
 
 def get_db():
     db = SessionLocal()
@@ -41,8 +42,8 @@ def get_current_user_id(x_api_key: str = Header(None)):
     return USER_KEYS[x_api_key]
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def compare_metrics_with_saved_models(model_ids: MetricsCompareRequest, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def compare_metrics_with_saved_models(model_id: MetricsCompareRequest, db: db_dependency, user_id: int = Depends(get_current_user_id)):
 
-    result = metrics_with_saved_models(user_id, model_ids.model_ids, db)
+    result = metrics_with_saved_models(user_id, model_id.model_ida, model_id.model_idb, db)
 
     return result
