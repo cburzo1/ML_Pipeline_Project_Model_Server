@@ -10,7 +10,7 @@ class TrainedModels(Base):
 
     id = Column(String(36), primary_key=True, index=True)
     flow_id = Column(String(36))
-    user_id = Column(BIGINT, nullable=False)
+    user_id = Column(String(36), nullable=False)
     model_type = Column(String(128))
     model_path =  Column(String(255))
     metrics_json = Column(MutableDict.as_mutable(JSON))

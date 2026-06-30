@@ -17,7 +17,7 @@ from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-def delete_model(model_id: str, user_id: int, db: Session):
+def delete_model(model_id: str, user_id: str, db: Session):
     trained_model = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
         TrainedModels.id == model_id
@@ -68,7 +68,7 @@ def delete_model(model_id: str, user_id: int, db: Session):
 
     return {"detail": "Model deleted"}
 
-def get_all_models(user_id: int, db: Session):
+def get_all_models(user_id: str, db: Session):
     trained_models = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id
     ).all()
@@ -172,7 +172,7 @@ def train_linear_regression(X, y, flow):
 
     return model, sc, metrics
 
-def train_model(flow_name: str, user_id: int, db: Session):
+def train_model(flow_name: str, user_id: str, db: Session):
     flow = db.query(UserFlows).filter(
         UserFlows.user_id == user_id,
         UserFlows.flow_name == flow_name

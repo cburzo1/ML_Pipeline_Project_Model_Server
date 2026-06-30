@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from models.trained_models import TrainedModels
 
-def metrics_with_saved_models(user_id: int, model_id_a, model_id_b, db: Session):
+def metrics_with_saved_models(user_id: str, model_id_a, model_id_b, db: Session):
     model_a = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
         TrainedModels.id == model_id_a

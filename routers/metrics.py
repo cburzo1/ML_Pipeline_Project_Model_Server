@@ -1,7 +1,7 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException, Header, Query
 from pydantic import BaseModel
-
+from services.auth_service import get_current_user
 from database import SessionLocal
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,7 @@ def get_current_user_id(x_api_key: str = Header(None)):
     return USER_KEYS[x_api_key]
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def compare_metrics_with_saved_models(model_id: MetricsCompareRequest, db: db_dependency, user_id: int = Depends(get_current_user_id)):
+async def compare_metrics_with_saved_models(model_id: MetricsCompareRequest, db: db_dependency, user_id: str = Depends(get_current_user)):
 
     result = metrics_with_saved_models(user_id, model_id.model_ida, model_id.model_idb, db)
 

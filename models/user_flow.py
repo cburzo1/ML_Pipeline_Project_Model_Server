@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Boolean, Column, Integer, String, BIGINT, JSON, DateTime, func, UniqueConstraint
+from sqlalchemy import Boolean, Column, Integer, String, BIGINT, JSON, DateTime, func, UniqueConstraint, false
 from database import Base
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.dialects.postgresql import JSON
@@ -9,7 +9,7 @@ class UserFlows(Base):
     __tablename__ = 'user_flows'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    user_id = Column(BIGINT)
+    user_id = Column(String(36), nullable=False)
     flow_name = Column(String(128))
     dataset_name = Column(String(128))
     dataset_id =  Column(String(36))

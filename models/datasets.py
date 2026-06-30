@@ -12,7 +12,7 @@ class DataSets(Base):
     __tablename__ = 'datasets'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    user_id = Column(BIGINT, nullable=False)
+    user_id = Column(String(36), nullable=False)
     dataset_name = Column(String(128), nullable=False)
     description = Column(Text)
     format = Column(SQLEnum(DataFormat), nullable=False, default=DataFormat.csv)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from models.trained_models import TrainedModels
 import pandas as pd
 
-def predict_model(model_id: str, input_data: dict, user_id: int, db: Session):
+def predict_model(model_id: str, input_data: dict, user_id: str, db: Session):
 
     trained_model = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
@@ -70,7 +70,7 @@ def predict_model(model_id: str, input_data: dict, user_id: int, db: Session):
         "latency_ms": round(latency, 3)
     }
 
-def predict_using_csv(model_id: str, file, user_id: int, db: Session):
+def predict_using_csv(model_id: str, file, user_id: str, db: Session):
     trained_model = db.query(TrainedModels).filter(
         TrainedModels.user_id == user_id,
         TrainedModels.id == model_id

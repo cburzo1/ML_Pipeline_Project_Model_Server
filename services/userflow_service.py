@@ -9,7 +9,7 @@ from models.user_flow import UserFlows
 from schemas.config_schema import ConfigSchema
 
 
-def get_by_flowname(flow_name: str, db: Session, user_id: int):
+def get_by_flowname(flow_name: str, db: Session, user_id: str):
     flow = (
         db.query(UserFlows)
         .filter(
@@ -32,7 +32,7 @@ def get_by_flowname(flow_name: str, db: Session, user_id: int):
         "created_at": flow.created_at
     }
 
-def get_userflows(db: Session, user_id: int):
+def get_userflows(db: Session, user_id: str):
     flows = (
         db.query(UserFlows)
         .filter(
@@ -50,7 +50,7 @@ def get_userflows(db: Session, user_id: int):
 
     return flow_list
 
-def create_userflow(user_flow, db: Session, user_id: int):
+def create_userflow(user_flow, db: Session, user_id: str):
     dataset = (
         db.query(DataSets)
         .filter(
@@ -106,7 +106,7 @@ def create_userflow(user_flow, db: Session, user_id: int):
             detail=f"Database error: {str(e)}"
         )
 
-def delete_userflow_by_name(flow_name: str, db: Session, user_id: int):
+def delete_userflow_by_name(flow_name: str, db: Session, user_id: str):
     flow = (
         db.query(UserFlows)
         .filter(
@@ -143,7 +143,7 @@ def deep_merge(old: dict, new: dict):
             old[key] = value
     return old
 
-def update_userflow(flow_name: str, updates, db: Session, user_id: int):
+def update_userflow(flow_name: str, updates, db: Session, user_id: str):
     flow = db.query(UserFlows).filter(
         UserFlows.user_id == user_id,
         UserFlows.flow_name == flow_name

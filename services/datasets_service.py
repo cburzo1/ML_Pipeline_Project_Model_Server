@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from models.datasets import DataSets
 
 
-def get_dataset_by_name(dataset_name: str,user_id: int, db: Session):
+def get_dataset_by_name(dataset_name: str,user_id: str, db: Session):
     dataset = (
         db.query(DataSets)
         .filter(
@@ -32,7 +32,7 @@ def get_dataset_by_name(dataset_name: str,user_id: int, db: Session):
         "created_at": dataset.created_at
     }
 
-def get_all_datasets(user_id: int, db: Session):
+def get_all_datasets(user_id: str, db: Session):
     datasets = (
         db.query(DataSets)
         .filter(
@@ -50,7 +50,7 @@ def get_all_datasets(user_id: int, db: Session):
 
     return dataset_list
 
-def create_dataset(user_id: int, db: Session, dataset_name: str, description: str, file):
+def create_dataset(user_id: str, db: Session, dataset_name: str, description: str, file):
 
     # 1. Validate filename
     if not file.filename or not file.filename.lower().endswith(".csv"):
@@ -132,7 +132,7 @@ def create_dataset(user_id: int, db: Session, dataset_name: str, description: st
         "row_count": row_count
     }
 
-def delete_dataset(dataset_name: str, user_id: int, db: Session):
+def delete_dataset(dataset_name: str, user_id: str, db: Session):
     dataset = (
         db.query(DataSets)
         .filter(
