@@ -2,11 +2,14 @@ import base64
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+loaded = load_dotenv()
 
 import jwt
 from fastapi import Header, HTTPException
-SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if SECRET_KEY is None:
+    raise RuntimeError("SECRET_KEY environment variable is missing")
 
 def verify_token(token: str):
     try:

@@ -1,3 +1,4 @@
+import io
 import os
 import uuid
 
@@ -16,6 +17,7 @@ from models.datasets import DataSets
 from models.user_flow import UserFlows
 from models.trained_models import TrainedModels
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from services.storage_service import upload_file, delete_file, get_file
 
 def delete_model(model_id: str, user_id: str, db: Session):
     trained_model = db.query(TrainedModels).filter(
@@ -29,32 +31,17 @@ def delete_model(model_id: str, user_id: str, db: Session):
             detail=f"Model '{model_id}' not found."
         )
 
-    file_loc = f"bucket/{trained_model.model_path}"
+    #file_loc = f"bucket/{trained_model.model_path}"
+    s3_key = f"{trained_model.model_path}"
 
-    if os.path.exists(file_loc):
-        os.remove(file_loc)
-        print(f"File '{file_loc}' has been deleted.")
-
-    else:
-        print(f"File '{file_loc}' does not exist.")
-
-    trained_model_dir = f"bucket/{user_id}/trained_models"
-
-    if os.path.exists(trained_model_dir):
-        with os.scandir(trained_model_dir) as entries:
-            if not any(entries):
-                os.rmdir(trained_model_dir)
-            else:
-                print(f"Folder '{trained_model_dir}' is not empty.")
-
-    user_dir = f"bucket/{user_id}"
-
-    if os.path.exists(user_dir):
-        with os.scandir(user_dir) as entries:
-            if not any(entries):
-                os.rmdir(user_dir)
-            else:
-                print(f"Folder '{user_dir}' is not empty.")
+    try:
+        delete_file(s3_key[1:])
+        print("DELETED???", s3_key[1:])
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete trained model file from storage."
+        )
 
     try:
         db.delete(trained_model)
@@ -63,10 +50,10 @@ def delete_model(model_id: str, user_id: str, db: Session):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail="Failed to delete model"
+            detail="Failed to delete trained model from database."
         )
 
-    return {"detail": "Model deleted"}
+    return {"detail": "DELETED"}
 
 def get_all_models(user_id: str, db: Session):
     trained_models = db.query(TrainedModels).filter(
@@ -86,8 +73,8 @@ def get_all_models(user_id: str, db: Session):
     return trained_models_list
 
 def prepare_data(flow, data_set_meta):
-    user_file = f"bucket/{data_set_meta.storage_path}.csv"
-    df = pd.read_csv(user_file)
+    user_file = f"{data_set_meta.storage_path}"
+    df = pd.read_csv(get_file(user_file))
 
     column_X = flow.config_json.get("data_range_X")
     column_y = flow.config_json.get("data_range_y")
@@ -200,11 +187,9 @@ def train_model(flow_name: str, user_id: str, db: Session):
     # Step 3: persist
     model_id = str(uuid.uuid4())
 
-    model_dir = f"bucket/{user_id}/trained_models"
-    os.makedirs(model_dir, exist_ok=True)
-
-    model_path = f"{model_dir}/model_{model_id}.pkl"
     relative_file_loc = f"/{user_id}/trained_models/model_{model_id}.pkl"
+
+    s3_key = f"{user_id}/trained_models/model_{model_id}.pkl"
 
     bundle = {
         "model": model,
@@ -213,7 +198,19 @@ def train_model(flow_name: str, user_id: str, db: Session):
         "metrics": metrics
     }
 
-    joblib.dump(bundle, model_path)
+    model_buffer = io.BytesIO()
+
+    joblib.dump(bundle, model_buffer)
+
+    model_buffer.seek(0)
+
+    try:
+        upload_file(model_buffer, s3_key)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to upload model."
+        )
 
     new_model = TrainedModels(
         id=model_id,
@@ -227,9 +224,13 @@ def train_model(flow_name: str, user_id: str, db: Session):
     try:
         db.add(new_model)
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise HTTPException(500, "Failed to save model")
+        print(e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save model: {str(e)}"
+        )
 
     return {
         "model_id": model_id,

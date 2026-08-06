@@ -4,6 +4,7 @@ import joblib
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from models.trained_models import TrainedModels
+from services.storage_service import get_file
 
 def metrics_with_saved_models(user_id: str, model_id_a, model_id_b, db: Session):
     model_a = db.query(TrainedModels).filter(
@@ -28,13 +29,13 @@ def metrics_with_saved_models(user_id: str, model_id_a, model_id_b, db: Session)
             detail=f"model '{model_id_b}' not found."
         )
 
-    model_dir = f"bucket/{user_id}/trained_models"
+    mp_a = f"{user_id}/trained_models/model_{model_a.id}.pkl"
 
-    model_a_path = f"{model_dir}/model_{model_a.id}.pkl"
-    metrics_model_a = joblib.load(model_a_path).get("metrics")
+    metrics_model_a = joblib.load(get_file(mp_a)).get("metrics")
 
-    model_b_path = f"{model_dir}/model_{model_b.id}.pkl"
-    metrics_model_b = joblib.load(model_b_path).get("metrics")
+    mp_b = f"{user_id}/trained_models/model_{model_b.id}.pkl"
+
+    metrics_model_b = joblib.load(get_file(mp_b)).get("metrics")
 
     if not metrics_model_a or not metrics_model_b:
         raise HTTPException(

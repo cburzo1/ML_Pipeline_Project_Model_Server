@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from models.trained_models import TrainedModels
 import pandas as pd
 
+from services.storage_service import get_file
+
 def predict_model(model_id: str, input_data: dict, user_id: str, db: Session):
 
     trained_model = db.query(TrainedModels).filter(
@@ -19,10 +21,9 @@ def predict_model(model_id: str, input_data: dict, user_id: str, db: Session):
             detail=f"model '{model_id}' for user {user_id} not found."
         )
 
-    model_dir = f"bucket/{user_id}/trained_models"
-    model_path = f"{model_dir}/model_{model_id}.pkl"
+    mp = f"{user_id}/trained_models/model_{model_id}.pkl"
 
-    bundle = joblib.load(model_path)
+    bundle = joblib.load(get_file(mp))
 
     feature_order_columns = bundle.get("feature_order")
     model = bundle.get("model")
@@ -85,7 +86,9 @@ def predict_using_csv(model_id: str, file, user_id: str, db: Session):
     model_dir = f"bucket/{user_id}/trained_models"
     model_path = f"{model_dir}/model_{model_id}.pkl"
 
-    bundle = joblib.load(model_path)
+    mp = f"{user_id}/trained_models/model_{model_id}.pkl"
+
+    bundle = joblib.load(get_file(mp))
 
     feature_order_columns = bundle.get("feature_order")
     model = bundle.get("model")

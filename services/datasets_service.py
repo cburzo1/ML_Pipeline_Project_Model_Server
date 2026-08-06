@@ -5,7 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from models.datasets import DataSets
-
+from models.user_flow import UserFlows
+from services.storage_service import upload_file, delete_file
 
 def get_dataset_by_name(dataset_name: str,user_id: str, db: Session):
     dataset = (
@@ -91,40 +92,53 @@ def create_dataset(user_id: str, db: Session, dataset_name: str, description: st
     # 5. Reset file pointer (IMPORTANT)
     file.file.seek(0)
 
-    # 6. Write file to disk
-    user_folder = f"bucket/{user_id}/csv"
-    os.makedirs(user_folder, exist_ok=True)
-    file_loc = f"{user_folder}/{dataset_name}.csv"
+    s3_key = f"{user_id}/csv/{dataset_name}.csv"
 
-    with open(file_loc, "wb") as buffer:
-        buffer.write(file.file.read())
-
-    # 7. Store relative path (clean format)
-    relative_file_loc = f"{user_id}/csv/{dataset_name}"
+    try:
+        upload_file(file.file, s3_key)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to upload dataset."
+        )
 
     new_dataset = DataSets(
         user_id=user_id,
         dataset_name=dataset_name,
         description=description,
-        storage_path=relative_file_loc,
+        storage_path=s3_key,#relative_file_loc
         row_count=row_count,
         column_schema=schema
     )
 
-    # 8. DB insert (with safety net)
     try:
         db.add(new_dataset)
         db.commit()
+
     except IntegrityError:
         db.rollback()
 
-        # Optional: cleanup (should rarely happen now, but safe)
-        if os.path.exists(file_loc):
-            os.remove(file_loc)
+        try:
+            delete_file(s3_key)
+        except Exception:
+            pass
 
         raise HTTPException(
             status_code=400,
             detail=f"Dataset '{dataset_name}' already exists for this user."
+        )
+
+    except Exception:
+        db.rollback()
+
+        try:
+            delete_file(s3_key)
+        except Exception:
+            pass
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create dataset."
         )
 
     return {
@@ -148,9 +162,39 @@ def delete_dataset(dataset_name: str, user_id: str, db: Session):
             detail=f"Data set '{dataset_name}' not found for user {user_id}"
         )
 
-    file_loc = f"bucket/{dataset.storage_path}.csv"
+    flow = (
+        db.query(UserFlows)
+        .filter(
+            UserFlows.user_id == user_id,
+            UserFlows.dataset_name == dataset_name
+        )
+        .first()
+    )
 
-    # 1. Delete from DB FIRST
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User flow with dataset '{dataset_name}' was not found"
+        )
+
+    if flow.dataset_name == dataset_name:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{dataset_name} ' is bound to user_flow configuration {flow.flow_name}"
+        )
+
+    s3_key = f"{user_id}/csv/{dataset_name}.csv"
+
+    # Delete the file from S3
+    try:
+        delete_file(s3_key)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete dataset file from storage."
+        )
+
+    # Delete the database record
     try:
         db.delete(dataset)
         db.commit()
@@ -160,30 +204,5 @@ def delete_dataset(dataset_name: str, user_id: str, db: Session):
             status_code=500,
             detail="Failed to delete dataset from database."
         )
-
-    # 2. Then delete file (best effort)
-    if os.path.exists(file_loc):
-        os.remove(file_loc)
-        print(f"File '{file_loc}' has been deleted.")
-
-        user_folder_csv = f"bucket/{user_id}/csv"
-        user_folder = f"bucket/{user_id}"
-
-        if os.path.exists(user_folder_csv):
-            with os.scandir(user_folder_csv) as entries:
-                if not any(entries):
-                    os.rmdir(user_folder_csv)
-                else:
-                    print(f"Folder '{user_folder_csv}' is not empty.")
-
-        if os.path.exists(user_folder):
-            with os.scandir(user_folder) as entries:
-                if not any(entries):
-                    os.rmdir(user_folder)
-                else:
-                    print(f"Folder '{user_folder}' is not empty.")
-
-    else:
-        print(f"File '{file_loc}' does not exist.")
 
     return {"detail": "DELETED"}
