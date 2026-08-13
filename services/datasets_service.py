@@ -172,37 +172,32 @@ def delete_dataset(dataset_name: str, user_id: str, db: Session):
     )
 
     if not flow:
+        s3_key = f"{user_id}/csv/{dataset_name}.csv"
+
+        # Delete the file from S3
+        try:
+            delete_file(s3_key)
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete dataset file from storage."
+            )
+
+        # Delete the database record
+        try:
+            db.delete(dataset)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete dataset from database."
+            )
+
+        return {"detail": "DELETED"}
+
+    else:
         raise HTTPException(
             status_code=404,
-            detail=f"User flow with dataset '{dataset_name}' was not found"
+            detail="dataset is bound to userflow"
         )
-
-    if flow.dataset_name == dataset_name:
-        raise HTTPException(
-            status_code=404,
-            detail=f"{dataset_name} ' is bound to user_flow configuration {flow.flow_name}"
-        )
-
-    s3_key = f"{user_id}/csv/{dataset_name}.csv"
-
-    # Delete the file from S3
-    try:
-        delete_file(s3_key)
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete dataset file from storage."
-        )
-
-    # Delete the database record
-    try:
-        db.delete(dataset)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete dataset from database."
-        )
-
-    return {"detail": "DELETED"}

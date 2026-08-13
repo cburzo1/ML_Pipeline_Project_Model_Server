@@ -62,9 +62,11 @@ async def create_datasets(db: db_dependency, dataset_name: str = Form(...), desc
     return result
 
 
-@router.delete("/{dataset_name}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{dataset_name}", status_code=status.HTTP_410_GONE)
 async def delete_datasets(dataset_name: str, db: db_dependency, user_id: str = Depends(get_current_user_id)):
 
     result = delete_dataset(dataset_name, user_id, db)
+
+    print(result)
 
     return result
