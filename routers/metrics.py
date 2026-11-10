@@ -1,9 +1,17 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, status, HTTPException, Header, Query
 from pydantic import BaseModel
-#from services.auth_service import get_current_user
+from services.auth_service import get_current_user_id_auth
 from database import SessionLocal
 from sqlalchemy.orm import Session
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+PROD_AUTH = os.environ.get("PROD_AUTH")
+DEV_AUTH = os.environ.get("DEV_AUTH")
 
 from services.metrics_service import metrics_with_saved_models
 
@@ -36,10 +44,15 @@ USER_KEYS = {
     "KEY789": 3
 }
 
-def get_current_user_id(x_api_key: str = Header(None)):
+def get_current_user_id_dev(x_api_key: str = Header(None)):
     if x_api_key not in USER_KEYS:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return USER_KEYS[x_api_key]
+
+if PROD_AUTH == "TRUE":
+    get_current_user_id = get_current_user_id_auth
+else:
+    get_current_user_id = get_current_user_id_dev
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def compare_metrics_with_saved_models(model_id: MetricsCompareRequest, db: db_dependency, user_id: str = Depends(get_current_user_id)):

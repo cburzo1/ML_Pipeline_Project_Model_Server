@@ -11,7 +11,8 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD")
 DB_USERNAME = os.environ.get("DB_USERNAME")
 DB_NAME = os.environ.get("DB_NAME")
 
-URL_DATABASE = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@mysql:3306/{DB_NAME}'
+#URL_DATABASE = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@mysql:3306/{DB_NAME}'
+URL_DATABASE = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@localhost:3306/{DB_NAME}'
 
 engine = create_engine(URL_DATABASE)
 

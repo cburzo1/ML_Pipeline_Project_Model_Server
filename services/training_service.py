@@ -92,10 +92,16 @@ def prepare_data(flow, data_set_meta):
             detail=f"Invalid column(s): {missing}. Available columns: {list(df.columns)}"
         )
 
-    rows = flow.config_json.get('row_range')
+    rows = flow.config_json.get("row_range")
 
-    X = df.iloc[rows[0]:rows[1]][[column_X]].values
-    y = df.iloc[rows[0]:rows[1]][[column_y]].values
+    if rows is not None:
+        start_row, end_row = rows
+    else:
+        start_row = 0
+        end_row = len(df)
+
+    X = df.iloc[start_row:end_row][[column_X]].values
+    y = df.iloc[start_row:end_row][[column_y]].values
 
     # Encoding (basic)
     DTYPE_X = data_set_meta.column_schema.get(column_X)
@@ -129,7 +135,7 @@ def prepare_data(flow, data_set_meta):
 def train_linear_regression(X, y, flow):
     test_size = flow.config_json.get("test_size")
 
-    if test_size is None or not (0 < test_size <= 1):
+    if test_size is None or not (0 < test_size < 1):
         raise HTTPException(
             status_code=400,
             detail="Invalid test_size"
@@ -169,6 +175,7 @@ def train_model(flow_name: str, user_id: str, db: Session):
         raise HTTPException(404, f"Flow '{flow_name}' not found")
 
     data_set = db.query(DataSets).filter(
+        DataSets.user_id == user_id,
         DataSets.dataset_name == flow.dataset_name
     ).first()
 

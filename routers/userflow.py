@@ -5,8 +5,16 @@ from schemas.config_schema import ConfigSchema
 from pydantic import BaseModel
 from database import SessionLocal
 from sqlalchemy.orm import Session
-#from services.auth_service import get_current_user
+from services.auth_service import get_current_user_id_auth
 from services.userflow_service import get_by_flowname, get_userflows, create_userflow, delete_userflow_by_name, update_userflow
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+PROD_AUTH = os.environ.get("PROD_AUTH")
+DEV_AUTH = os.environ.get("DEV_AUTH")
 
 router = APIRouter(
     prefix="/user_flows",
@@ -38,10 +46,15 @@ USER_KEYS = {
     "KEY789": 3
 }
 
-def get_current_user_id(x_api_key: str = Header(None)):
+def get_current_user_id_dev(x_api_key: str = Header(None)):
     if x_api_key not in USER_KEYS:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return USER_KEYS[x_api_key]
+
+if PROD_AUTH == "TRUE":
+    get_current_user_id = get_current_user_id_auth
+else:
+    get_current_user_id = get_current_user_id_dev
 
 @router.get("/{flow_name}", status_code=status.HTTP_200_OK)
 async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: str = Depends(get_current_user_id)):
@@ -52,7 +65,7 @@ async def get_flow_by_name(flow_name: str, db: db_dependency, user_id: str = Dep
 @router.get("/", status_code=status.HTTP_200_OK)
 async def get_user_flows(db: db_dependency, user_id: str = Depends(get_current_user_id)):
 
-    result = get_userflows(db, user_id, )
+    result = get_userflows(db, user_id)
 
     return result
 

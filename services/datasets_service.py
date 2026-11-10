@@ -172,18 +172,7 @@ def delete_dataset(dataset_name: str, user_id: str, db: Session):
     )
 
     if not flow:
-        s3_key = f"{user_id}/csv/{dataset_name}.csv"
-
-        # Delete the file from S3
-        try:
-            delete_file(s3_key)
-        except Exception:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to delete dataset file from storage."
-            )
-
-        # Delete the database record
+        # Delete the database record first
         try:
             db.delete(dataset)
             db.commit()
@@ -192,6 +181,20 @@ def delete_dataset(dataset_name: str, user_id: str, db: Session):
             raise HTTPException(
                 status_code=500,
                 detail="Failed to delete dataset from database."
+            )
+
+        # Delete the file from S3 after the database deletion succeeds
+        s3_key = f"{user_id}/csv/{dataset_name}.csv"
+
+        try:
+            delete_file(s3_key)
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Dataset was deleted from the database, "
+                    "but its file could not be deleted from storage."
+                )
             )
 
         return {"detail": "DELETED"}
